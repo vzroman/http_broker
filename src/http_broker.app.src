@@ -1,6 +1,6 @@
 {application, http_broker,
- [{description, "An OTP application"},
-  {vsn, "0.1.0"},
+ [{description, "HTTP broker"},
+  {vsn, git},
   {registered, []},
   {mod, {http_broker, []}},
   {applications,
@@ -10,6 +10,6 @@
   {env,[]},
   {modules, []},
 
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["MIT"]},
   {links, []}
  ]}.
