@@ -20,21 +20,21 @@ init([]) ->
     ChildSpecs = [listener(http, 7000)],
 
     io:format("~nLISTENER: ~p",[ChildSpecs]),
+    io:format("~nAQAQAQ ~p", [?ENV(stop_timeout, ?DEFAULT_STOP_TIMEOUT)]),
     read_endpoints(),
 
     {ok, {SupFlags, ChildSpecs}}.
 
 read_endpoints() ->
-  Endpoints = ?ENV(http_broker, [{endpoints, []}]),
+  Endpoints = ?ENV(endpoints, #{}),
   io:format("~nEndpoints: ~p~n", [Endpoints]).
 
-dispatch_rules() ->
-  Routes = [
-    {'_', [
-      {"/service1/some_path", http_redirect, []}
-    ]}
-  ],
-  cowboy_router:compile(Routes).
+dispatch_rules()->
+  Endpoints = todo,
+  cowboy_router:compile([{'_',[
+    {endpoint_key, http_broker_accepter, [ endpoint_value ]}
+  ]}]
+  ).
 
 listener(http, Port) when is_integer(Port) ->
   #{
@@ -42,7 +42,7 @@ listener(http, Port) when is_integer(Port) ->
     start => { cowboy, start_clear, [
       http_broker,
       [{port, Port}],
-      #{env => #{dispatch => dispatch_rules()} }
+      #{env => #{dispatch=> dispatch_rules()} }
     ]},
     restart => permanent,
     shutdown => ?ENV(stop_timeout, ?DEFAULT_STOP_TIMEOUT),
