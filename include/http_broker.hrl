@@ -1,3 +1,8 @@
+%% +--------------------------------------------------------------+
+%% | Copyright (c) 2023, Faceplate LTD. All Rights Reserved.      |
+%% | Author: Karimov Adilbek, @berikka10@gmail.com                |
+%% +--------------------------------------------------------------+
+
 -ifndef(http_broker).
 -define(http_broker, 1).
 

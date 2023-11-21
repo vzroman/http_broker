@@ -1,7 +1,7 @@
-%%-----------------------------------------------------------------
-%% Copyright (c) 2018, Vozzhenikov Roman. All Rights Reserved.
-%% Author: Vozzhenikov Roman, vzroman@gmail.com
-%%-----------------------------------------------------------------
+%% +--------------------------------------------------------------+
+%% | Copyright (c) 2023, Faceplate LTD. All Rights Reserved.      |
+%% | Author: Karimov Adilbek, @berikka10@gmail.com                |
+%% +--------------------------------------------------------------+
 
 -module(http_broker_acceptor).
 
@@ -17,37 +17,16 @@
   terminate/3
 ]).
 
-init(Req0, Opts) ->
-  Req0 = cowboy_req:reply(200, #{}, <<"TestResponse">>, Req0),
+init(Req, Opts) ->
+  Req0 = cowboy_req:reply(200, #{}, <<"TestResponse222">>, Req),
   {ok,Body,_} = cowboy_req:read_body(Req0),
   io:format("~nDEBUG: Request~p", [Req0]),
   io:format("~nDEBUG: Body ~p", [Body]),
 
-  send_request(<<"http://127.0.0.1:7000/endpoint2">>, Body),
+  http_broker_sender:send_request("endpoint1", Body),
 
   {ok, Req0, Opts}.
 
 
 terminate(_Reason, _Req, _State) ->
   ok.
-
-send_request(<<"http", _/binary>> = URL, Data) ->
-  HTTPMethod  = post,
-  HTTPHeaders = [{"Content-Type", "application/json"} | []],
-  HTTPRequest = {URL, HTTPHeaders, "application/json", Data},
-  HTTPOptions = [],
-  Options     = [{body_format, binary}],
-
-  try
-    case httpc:request(HTTPMethod, HTTPRequest, HTTPOptions, Options) of
-      {ok, {{_, Code, _}, _ResponseHeaders, _ResponseBody}} when Code >= 200, Code =< 299 ->
-        jsx:from_json(_ResponseBody);
-      {ok, {{_, Code, _}, _, _ResponseBody}} ->
-        throw({error, {unexpected_response_code, Code}});
-      {error, Error} ->
-        throw({error, Error})
-    end
-  catch
-    _:HTTPError ->
-      {error, HTTPError}
-  end.

@@ -1,3 +1,8 @@
+%% +--------------------------------------------------------------+
+%% | Copyright (c) 2023, Faceplate LTD. All Rights Reserved.      |
+%% | Author: Karimov Adilbek, @berikka10@gmail.com                |
+%% +--------------------------------------------------------------+
+
 -module(http_broker_sup).
 
 -behaviour(supervisor).
@@ -5,7 +10,7 @@
 -include("http_broker.hrl").
 
 -export([start_link/0]).
--export([init/1, get_targets/1]).
+-export([init/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -22,7 +27,6 @@ init([]) ->
     io:format("~nListener: ~p",[ChildSpecs]),
     HTTP_Listeners = ?ENV(endpoints, #{}),
     io:format("~nValues: ~p~n",[maps:values(HTTP_Listeners)]),
-    io:format("~nKeys: ~p~n",[get_targets(HTTP_Listeners)]),
     {ok, {SupFlags, ChildSpecs}}.
 
 dispatch_rules() ->
@@ -50,9 +54,3 @@ listener(_, _) ->
   io:format("~nListener is not correct", []),
   undefined.
 
-get_targets(Data) ->
-  Maps = maps:values(Data),
-  lists:flatmap(fun(#{ targets := TargetMap })
-    -> maps:keys(TargetMap);
-    (_) -> []
-  end, Maps).
