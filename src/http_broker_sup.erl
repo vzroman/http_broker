@@ -5,7 +5,7 @@
 -include("http_broker.hrl").
 
 -export([start_link/0]).
--export([init/1]).
+-export([init/1, get_targets/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -19,22 +19,19 @@ init([]) ->
 
     ChildSpecs = [listener(http, 7000)],
 
-    io:format("~nLISTENER: ~p",[ChildSpecs]),
-    io:format("~nAQAQAQ ~p", [?ENV(stop_timeout, ?DEFAULT_STOP_TIMEOUT)]),
-    read_endpoints(),
-
+    io:format("~nListener: ~p",[ChildSpecs]),
+    HTTP_Listeners = ?ENV(endpoints, #{}),
+    io:format("~nValues: ~p~n",[maps:values(HTTP_Listeners)]),
+    io:format("~nKeys: ~p~n",[get_targets(HTTP_Listeners)]),
     {ok, {SupFlags, ChildSpecs}}.
 
-read_endpoints() ->
+dispatch_rules() ->
   Endpoints = ?ENV(endpoints, #{}),
-  io:format("~nEndpoints: ~p~n", [Endpoints]).
+  DispatchRules = [{"/" ++ Key, http_broker_acceptor, [Value]}
+    || {Key, Value} <- maps:to_list(Endpoints)],
 
-dispatch_rules()->
-  Endpoints = todo,
-  cowboy_router:compile([{'_',[
-    {endpoint_key, http_broker_accepter, [ endpoint_value ]}
-  ]}]
-  ).
+  cowboy_router:compile([{'_', DispatchRules}]).
+
 
 listener(http, Port) when is_integer(Port) ->
   #{
@@ -49,7 +46,13 @@ listener(http, Port) when is_integer(Port) ->
     type => worker,
     modules => [cowboy]
   };
-
 listener(_, _) ->
   io:format("~nListener is not correct", []),
   undefined.
+
+get_targets(Data) ->
+  Maps = maps:values(Data),
+  lists:flatmap(fun(#{ targets := TargetMap })
+    -> maps:keys(TargetMap);
+    (_) -> []
+  end, Maps).
