@@ -18,12 +18,11 @@
 ]).
 
 init(Req0, Opts) ->
-%%  Req = cowboy_req:reply(200, #{}, <<"TestResponse">>, Req0),
+  Req0 = cowboy_req:reply(200, #{}, <<"TestResponse">>, Req0),
   {ok,Body,_} = cowboy_req:read_body(Req0),
   io:format("~nDEBUG: Request~p", [Req0]),
   io:format("~nDEBUG: Body ~p", [Body]),
 
-%%  Env = http_broker_sup:get_targets(?ENV(endpoints, #{})),
   send_request(<<"http://127.0.0.1:7000/endpoint2">>, Body),
 
   {ok, Req0, Opts}.
@@ -42,7 +41,7 @@ send_request(<<"http", _/binary>> = URL, Data) ->
   try
     case httpc:request(HTTPMethod, HTTPRequest, HTTPOptions, Options) of
       {ok, {{_, Code, _}, _ResponseHeaders, _ResponseBody}} when Code >= 200, Code =< 299 ->
-        fp_lib:from_json(_ResponseBody);
+        jsx:from_json(_ResponseBody);
       {ok, {{_, Code, _}, _, _ResponseBody}} ->
         throw({error, {unexpected_response_code, Code}});
       {error, Error} ->
