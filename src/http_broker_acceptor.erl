@@ -18,14 +18,14 @@
 ]).
 
 init(Req, Opts) ->
-  Req0 = cowboy_req:reply(200, #{}, <<"TestResponse222">>, Req),
-  {ok,Body,_} = cowboy_req:read_body(Req0),
-  io:format("~nDEBUG: Request~p", [Req0]),
-  io:format("~nDEBUG: Body ~p", [Body]),
+  Response = cowboy_req:reply(200, #{}, <<"TestResponse222">>, Req),
 
-  http_broker_sender:send_request("endpoint1", Body),
+  HTTPBody = http_broker_lib:get_http_body(Response),
+  HTTPHeaders = http_broker_lib:get_http_headers(Response),
 
-  {ok, Req0, Opts}.
+  http_broker_sender:send_request(HTTPHeaders, HTTPBody),
+
+  {ok, Response, Opts}.
 
 
 terminate(_Reason, _Req, _State) ->

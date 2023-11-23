@@ -20,7 +20,7 @@
 -define(DEFAULT_SCAN_CYCLE,1000).
 -define(DEFAULT_STOP_TIMEOUT,600000). % 10 min.
 
--define(SET_ENV(Key,Value),application:set_env(fp,Key,Value)).
+-define(SET_ENV(Key,Value),application:set_env(http_broker,Key,Value)).
 -define(ENV(Key,Default),application:get_env(http_broker,Key,Default)).
 -define(ENV(OS,Config,Default),
   (fun()->

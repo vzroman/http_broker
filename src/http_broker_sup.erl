@@ -22,11 +22,12 @@ init([]) ->
                  intensity => ?DEFAULT_MAX_RESTARTS,
                  period => ?DEFAULT_MAX_PERIOD},
 
-    ChildSpecs = [listener(http, 7000)],
-
+    ChildSpecs = [listener(http, ?ENV(port, #{}))],
     io:format("~nListener: ~p",[ChildSpecs]),
+
     HTTP_Listeners = ?ENV(endpoints, #{}),
     io:format("~nValues: ~p~n",[maps:values(HTTP_Listeners)]),
+
     {ok, {SupFlags, ChildSpecs}}.
 
 dispatch_rules() ->
