@@ -25,13 +25,12 @@ init([]) ->
     ChildSpecs = [listener(http, ?ENV(port, #{}))],
     io:format("~nListener: ~p",[ChildSpecs]),
 
-    HTTP_Listeners = ?ENV(endpoints, #{}),
-    io:format("~nValues: ~p~n",[maps:values(HTTP_Listeners)]),
+    io:format("~nValues: ~p~n",[maps:values(http_broker_lib:get_endpoints())]),
 
     {ok, {SupFlags, ChildSpecs}}.
 
 dispatch_rules() ->
-  Endpoints = ?ENV(endpoints, #{}),
+  Endpoints = http_broker_lib:get_endpoints(),
   DispatchRules = [{"/" ++ Key, http_broker_acceptor, [Value]}
     || {Key, Value} <- maps:to_list(Endpoints)],
 

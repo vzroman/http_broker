@@ -11,9 +11,7 @@
   get_http_headers/1,
   get_http_body/1,
   get_endpoints/0,
-  combine_endpoints/1,
-  group_orders/1,
-  sort_grouped_orders/1
+  sort_endpoints/1
 ]).
 
 get_http_headers(Response) ->
@@ -27,23 +25,18 @@ get_http_body(Response) ->
 get_endpoints() ->
   ?ENV(endpoints, #{}).
 
-combine_endpoints(Endpoints) ->
-  lists:flatten([
-    [{Value1, URL, Strategy} || {_, #{strategy := Strategy, targets := Targets}} <- maps:to_list(Endpoints),
-      {URL, #{order := Value1}} <- maps:to_list(Targets)]
-  ]).
+sort_endpoints(Endpoints) ->
+  EndpointsWithDefaults = maps:fold(fun default_order/3, [], Endpoints),
+  GroupedEndpoints = maps:groups_from_list(fun get_order/1, EndpointsWithDefaults),
+  maps:values(GroupedEndpoints).
 
-group_orders(OrdersURLs) ->
-  lists:foldl(
-    fun({Order, URL, Strategy}, Acc) ->
-      case lists:keyfind(Order, 1, Acc) of
-        false ->
-          [{Order, [{URL, Strategy}]} | Acc];
-        {Order, URLStrategies} ->
-          UpdatedURLStrategies = lists:keyreplace(Order, 1, Acc, {Order, [{URL, Strategy} | URLStrategies]}),
-          UpdatedURLStrategies
-      end
-    end, [], OrdersURLs).
+default_order(_Key, #{strategy := Strategy, targets := Targets}, Acc) ->
+  case maps:to_list(Targets) of
+    [{Target, #{order := Order}}] when is_integer(Order) ->
+      [{Order, Target, Strategy} | Acc];
+    [{Target, _}] ->
+      [{0, Target, Strategy} | Acc];
+    _ -> throw(bad_arg)
+  end.
 
-sort_grouped_orders(GroupedOrders) ->
-  lists:sort(fun({Order1, _}, {Order2, _}) -> Order1 =< Order2 end, GroupedOrders).
+get_order({Order, _Target, _Strategy}) -> Order.
