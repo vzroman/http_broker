@@ -14,7 +14,7 @@
 send_request(Headers, Body) ->
   Endpoints = http_broker_lib:get_endpoints(),
   Targets = http_broker_lib:group_endpoints(Endpoints),
-  io:format("OrdersURLs: ~p ~n", [Targets]),
+  ?LOGINFO("OrdersURLs: ~p ~n", [Targets]),
   handle_sorted_info(Headers, Body, Targets).
 
 handle_sorted_info(Headers, Body, Targets) ->
@@ -38,14 +38,14 @@ random_pick(Headers, Body, Orders) ->
 handle_strategy(one, URL, Headers, Body) ->
   case send_request_to_target(list_to_binary(URL), Headers, Body) of
     {ok, Response} ->
-      io:format("Successfully sent to ~p: ~p~n", [URL, Response]);
+      ?LOGINFO("Successfully sent to ~p: ~p~n", [URL, Response]);
     {error, Reason} ->
-      io:format("Failed to send to ~p: ~p~n", [URL, Reason])
+      ?LOGINFO("Failed to send to ~p: ~p~n", [URL, Reason])
   end;
 handle_strategy(all, _URL, _Headers, _Body) ->
-  io:format("TODO: all strategy ~n");
+  ?LOGINFO("TODO: all strategy ~n");
 handle_strategy(InvalidStrategy, _, _, _) ->
-  io:format("Unsupported strategy: ~p ~n", [InvalidStrategy]).
+  ?LOGINFO("Unsupported strategy: ~p ~n", [InvalidStrategy]).
 
 send_request_to_target(<<"http", _/binary>> = URL, HTTPHeaders, HTTPBody) ->
   HTTPMethod  = post,
