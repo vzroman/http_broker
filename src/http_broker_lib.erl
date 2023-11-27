@@ -11,7 +11,7 @@
   get_http_headers/1,
   get_http_body/1,
   get_endpoints/0,
-  sort_endpoints/1
+  group_endpoints/1
 ]).
 
 get_http_headers(Response) ->
@@ -25,8 +25,10 @@ get_http_body(Response) ->
 get_endpoints() ->
   ?ENV(endpoints, #{}).
 
-sort_endpoints(Endpoints) ->
+group_endpoints(Endpoints) ->
+  %% Inserting default values to the endpoints
   EndpointsWithDefaults = maps:fold(fun default_order/3, [], Endpoints),
+  %% Sorting and grouping endpoints
   GroupedEndpoints = maps:groups_from_list(fun get_order/1, EndpointsWithDefaults),
   maps:values(GroupedEndpoints).
 

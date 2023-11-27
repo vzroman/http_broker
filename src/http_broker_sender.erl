@@ -13,7 +13,7 @@
 
 send_request(Headers, Body) ->
   Endpoints = http_broker_lib:get_endpoints(),
-  SortedInfo = http_broker_lib:sort_endpoints(Endpoints),
+  SortedInfo = http_broker_lib:group_endpoints(Endpoints),
   io:format("OrdersURLs: ~p ~n", [SortedInfo]),
   handle_sorted_info(Headers, Body, SortedInfo).
 
