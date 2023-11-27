@@ -36,6 +36,7 @@ default_order(_Key, #{strategy := Strategy, targets := Targets}, Acc) ->
   case maps:to_list(Targets) of
     [{Target, #{order := Order}}] when is_integer(Order) ->
       [{Order, Target, Strategy} | Acc];
+    %% If order is undefined then it will be 0
     [{Target, _}] ->
       [{0, Target, Strategy} | Acc];
     _ -> throw(bad_arg)

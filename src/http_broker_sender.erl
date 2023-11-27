@@ -13,15 +13,15 @@
 
 send_request(Headers, Body) ->
   Endpoints = http_broker_lib:get_endpoints(),
-  SortedInfo = http_broker_lib:group_endpoints(Endpoints),
-  io:format("OrdersURLs: ~p ~n", [SortedInfo]),
-  handle_sorted_info(Headers, Body, SortedInfo).
+  Targets = http_broker_lib:group_endpoints(Endpoints),
+  io:format("OrdersURLs: ~p ~n", [Targets]),
+  handle_sorted_info(Headers, Body, Targets).
 
-handle_sorted_info(Headers, Body, SortedOrders) ->
+handle_sorted_info(Headers, Body, Targets) ->
   lists:foreach(
-    fun(Order) ->
-      random_pick(Headers, Body, Order)
-    end, SortedOrders).
+    fun(Target) ->
+      random_pick(Headers, Body, Target)
+    end, Targets).
 
 random_pick(Headers, Body, [{_, URL, Strategy}]) ->
   handle_strategy(Strategy, [URL], Headers, Body),
@@ -29,8 +29,10 @@ random_pick(Headers, Body, [{_, URL, Strategy}]) ->
 random_pick(Headers, Body, Orders) ->
   RandomIndex = rand:uniform(length(Orders)),
   {_, URL, Strategy} = RandomOrder = lists:nth(RandomIndex, Orders),
+
   handle_strategy(Strategy, [URL], Headers, Body),
   UpdatedOrders = lists:delete(RandomOrder, Orders),
+
   random_pick(Headers, Body, UpdatedOrders).
 
 handle_strategy(one, URL, Headers, Body) ->
@@ -42,9 +44,8 @@ handle_strategy(one, URL, Headers, Body) ->
   end;
 handle_strategy(all, _URL, _Headers, _Body) ->
   io:format("TODO: all strategy ~n");
-handle_strategy(_E , _, _, _) ->
-  io:format("Unsupported strategy: ~p ~n", [_E]).
-
+handle_strategy(InvalidStrategy, _, _, _) ->
+  io:format("Unsupported strategy: ~p ~n", [InvalidStrategy]).
 
 send_request_to_target(<<"http", _/binary>> = URL, HTTPHeaders, HTTPBody) ->
   HTTPMethod  = post,
