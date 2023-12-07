@@ -28,6 +28,7 @@ get_endpoints() ->
 group_endpoints(Endpoints) ->
   %% Inserting default values to the endpoints
   EndpointsWithDefaults = maps:fold(fun default_order/3, [], Endpoints),
+  ?LOGINFO("EndpointsWithDefaults ~p", [EndpointsWithDefaults]),
   %% Sorting and grouping endpoints
   GroupedEndpoints = maps:groups_from_list(fun get_order/1, EndpointsWithDefaults),
   maps:values(GroupedEndpoints).

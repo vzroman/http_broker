@@ -23,6 +23,7 @@ init([]) ->
                  period => ?DEFAULT_MAX_PERIOD},
 
     ChildSpecs = [listener(http, ?ENV(port, #{}))],
+
     io:format("~nListener: ~p",[ChildSpecs]),
 
     io:format("~nValues: ~p~n",[maps:values(http_broker_lib:get_endpoints())]),
