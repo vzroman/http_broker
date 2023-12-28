@@ -22,7 +22,8 @@
 
 init(CowboyRequest, #{
   strategy := Strategy,
-  targets := Targets
+  targets := Targets,
+  endpoint := Endpoint
 } = Config) ->
 
   { Body, CowboyRequest1} = read_body( CowboyRequest ),
@@ -33,7 +34,7 @@ init(CowboyRequest, #{
     body = Body
   },
 
-  {Target, Response} = handle_req( Targets, Request),
+  {Target, Response} = try_send( Targets, Request),
 
   #response{
     code = ResponseCode,
@@ -43,7 +44,7 @@ init(CowboyRequest, #{
 
   if
     Strategy =:= all andalso (ResponseCode >= 200 orelse ResponseCode =< 299)  ->
-      queue_request(Request, rest_targets( Target, Targets ) );
+      queue_request(Request, rest_targets( Target, Targets ), Endpoint );
     true ->
       ignore
   end,
@@ -66,14 +67,14 @@ init(CowboyRequest, #{
 terminate(_Reason, _Req, _State) ->
   ok.
 
-handle_req( Targets, Request )->
-  {Target, RestTargets } = pick_target( Targets ),
+try_send( Targets, Request )->
+  {Target, RestTargets} = pick_target( Targets ),
   case send_to_target( Target, Request ) of
     {ok, Response} ->
       {Target, Response};
     {error, Response}->
       if
-        map_size( RestTargets ) =:= 0 ->
+        length( RestTargets ) =:= 0 ->
           {Target, Response};
         true ->
           try_send( RestTargets, Request )

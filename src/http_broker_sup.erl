@@ -92,7 +92,7 @@ init([]) ->
 dispatch_rules( Endpoints ) ->
 
   DispatchRules =
-    [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ) } }
+    [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ), endpoint => Endpoint } }
     || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
 
   cowboy_router:compile([{'_', DispatchRules}]).
