@@ -18,17 +18,54 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
-    SupFlags = #{strategy => one_for_one,
-                 intensity => ?DEFAULT_MAX_RESTARTS,
-                 period => ?DEFAULT_MAX_PERIOD},
+  SupFlags = #{
+    strategy => one_for_one,
+    intensity => ?DEFAULT_MAX_RESTARTS,
+    period => ?DEFAULT_MAX_PERIOD
+  },
 
-    ChildSpecs = [listener(http, ?ENV(port, #{}))],
+  Listener = listener(http, ?ENV(port, #{})),
 
-    io:format("~nListener: ~p",[ChildSpecs]),
+  QueueService = #{
+    id => http_broker_queue_service,
+    start => {http_broker_queue_service, start_link, []},
+    restart => permanent,
+    shutdown => ?DEFAULT_STOP_TIMEOUT,
+    type => worker,
+    modules => [http_broker_queue_service]
+  },
+  MaxAgeService = #{
+    id => http_broker_max_age_service,
+    start => {http_broker_max_age_service, start_link, []},
+    restart => permanent,
+    shutdown => ?DEFAULT_STOP_TIMEOUT,
+    type => worker,
+    modules => [http_broker_max_age_service]
+  },
+  CleanupService = #{
+    id => http_broker_queue_cleanup_service,
+    start => {http_broker_queue_cleanup_service, start_link, []},
+    restart => permanent,
+    shutdown => ?DEFAULT_STOP_TIMEOUT,
+    type => worker,
+    modules => [http_broker_queue_cleanup_service]
+  },
+  SubscriptionsServer = #{
+    id=> esubscribe,
+    start=>{esubscribe,start_link,[?ESUBSCRIPTIONS]},
+    restart=>permanent,
+    shutdown=> ?DEFAULT_STOP_TIMEOUT,
+    type=>worker,
+    modules=>[esubscribe]
+  },
 
-    io:format("~nValues: ~p~n",[maps:values(http_broker_lib:get_endpoints())]),
-
-    {ok, {SupFlags, ChildSpecs}}.
+  {ok, {SupFlags, [
+    Listener,
+    QueueService,
+    MaxAgeService,
+    CleanupService
+%%    SubscriptionsServer
+  ]}}.
 
 dispatch_rules() ->
   Endpoints = http_broker_lib:get_endpoints(),

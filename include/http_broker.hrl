@@ -20,6 +20,13 @@
 -define(DEFAULT_SCAN_CYCLE,1000).
 -define(DEFAULT_STOP_TIMEOUT,600000). % 10 min.
 
+-define(ESUBSCRIPTIONS, '$http_broker_subscriptions$').
+
+-define(STARTING_ATTEMPT_VALUE, 0).
+
+-define(QUEUE(Endpoint,Ref), { queue, Endpoint, Ref}).
+-define(TARGET(Endpoint, Service, Ref),{ target, Endpoint, Service, Ref}).
+
 -define(SET_ENV(Key,Value),application:set_env(http_broker,Key,Value)).
 -define(ENV(Key,Default),application:get_env(http_broker,Key,Default)).
 -define(ENV(OS,Config,Default),

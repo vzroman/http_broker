@@ -18,13 +18,15 @@
 ]).
 
 init(Req, Opts) ->
-  Response = cowboy_req:reply(200, #{}, <<"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">>, Req),
+  Response = cowboy_req:reply(200, #{}, <<"">>, Req),
 
   HTTPBody = http_broker_lib:get_http_body(Response),
   HTTPHeaders = http_broker_lib:get_http_headers(Response),
-
+%%  A = zaya_rocksdb:find(http_broker_lib:queue_directory(), {{target, '_', '_'}, 1}),
   Req0 = http_broker_sender:send_request(HTTPHeaders, HTTPBody),
-%%  Response2 = cowboy_req:reply(ResponseCode, ResponseHeaders, ResponseBody, Req0),
+  HTTPBody0 = http_broker_lib:get_http_body(Response),
+  HTTPHeaders0 = http_broker_lib:get_http_headers(Response),
+%%  Response2 = cowboy_req:reply(200, HTTPBody0, HTTPHeaders0, Req0),
   {ok, Response, Opts}.
 
 

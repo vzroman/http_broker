@@ -11,7 +11,12 @@
   get_http_headers/1,
   get_http_body/1,
   get_endpoints/0,
-  group_endpoints/1
+  group_endpoints/1,
+  get_datetime/0,
+  generate_target_records/3,
+  send_request_to_target/3,
+  queue_directory/0,
+  get_names_and_urls/1
 ]).
 
 get_http_headers(Response) ->
@@ -28,19 +33,62 @@ get_endpoints() ->
 group_endpoints(Endpoints) ->
   %% Inserting default values to the endpoints
   EndpointsWithDefaults = maps:fold(fun default_order/3, [], Endpoints),
-  ?LOGINFO("EndpointsWithDefaults ~p", [EndpointsWithDefaults]),
   %% Sorting and grouping endpoints
   GroupedEndpoints = maps:groups_from_list(fun get_order/1, EndpointsWithDefaults),
   maps:values(GroupedEndpoints).
 
-default_order(_Key, #{strategy := Strategy, targets := Targets}, Acc) ->
+default_order(Key, #{strategy := Strategy, targets := Targets}, Acc) ->
   case maps:to_list(Targets) of
     [{Target, #{order := Order}}] when is_integer(Order) ->
-      [{Order, Target, Strategy} | Acc];
+      [{Key, Order, Target, Strategy} | Acc];
     %% If order is undefined then it will be 0
     [{Target, _}] ->
-      [{0, Target, Strategy} | Acc];
+      [{Key, 0, Target, Strategy} | Acc];
     _ -> throw(bad_arg)
   end.
 
-get_order({Order, _Target, _Strategy}) -> Order.
+get_order({_Key, Order, _Target, _Strategy}) -> Order.
+
+get_names_and_urls(Endpoints) ->
+  [{Name, URL} || {Name, #{targets := TargetMap}} <- maps:to_list(Endpoints), {URL, _} <- maps:to_list(TargetMap)].
+
+get_datetime()-> erlang:system_time(millisecond).
+
+generate_target_records(Targets, EndpointRef, Attempts) ->
+  {lists:flatmap(
+    fun(Group) ->
+      lists:map(
+        fun({EndpointName, _, URL, _}) ->
+          { ?TARGET(EndpointName, URL, EndpointRef), Attempts }
+        end, Group)
+    end, Targets), Attempts}.
+
+send_request_to_target(<<"http", _/binary>> = URL, HTTPHeaders, HTTPBody) ->
+  HTTPMethod  = post,
+  HTTPRequest = {URL, HTTPHeaders, "application/json", HTTPBody},
+  HTTPOptions = [],
+  Options     = [{body_format, binary}],
+
+  try
+    case httpc:request(HTTPMethod, HTTPRequest, HTTPOptions, Options) of
+      {ok, {{_, Code, _}, _ResponseHeaders, _ResponseBody}} when Code >= 200, Code =< 299 ->
+        ?LOGINFO("REQUEST: ~p ~n", [HTTPRequest]),
+        {ok, HTTPRequest};
+      {ok, {{_, Code, _}, _, _ResponseBody}} ->
+        throw({error, {unexpected_response_code, Code}});
+      {error, Error} ->
+        throw({error, Error})
+    end
+  catch
+    _:HTTPError ->
+      {error, HTTPError}
+  end.
+
+queue_directory() ->
+  DirectoryName = "QUEUE",
+  case filelib:is_dir(DirectoryName) of
+    true ->
+      zaya_rocksdb:open(#{dir => DirectoryName});
+    false ->
+      zaya_rocksdb:create(#{dir => DirectoryName})
+  end.
