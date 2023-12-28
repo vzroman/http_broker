@@ -12,83 +12,88 @@
 -export([start_link/0]).
 -export([init/1]).
 
--define(SERVER, ?MODULE).
-
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+
+  %------------------Listener-----------------------------
+  Port = ?ENV(port, ?DEFAULT_LISTEN_PORT),
+  SSL = ?ENV(ssl, []),
+  ListenerType =
+    if
+      SSL =:= [] -> start_clear;
+      true -> start_tls
+    end,
+
+  Endpoints = ?ENV(endpoints, #{}),
+
+  Listener =
+    #{
+      id=>http_listener,
+      start=>{ cowboy ,ListenerType ,[
+        http_listener,
+        [ {port, Port} | SSL],
+        #{env => #{dispatch=> dispatch_rules( Endpoints ) } }
+      ]},
+      restart=>permanent,
+      shutdown=>?ENV(stop_timeout, ?DEFAULT_STOP_TIMEOUT),
+      type=>worker,
+      modules=>[cowboy]
+    },
+
+  %-----------------Queue services----------------------------
+%%  QueueServices =
+%%    lists:append([
+%%      [ #{
+%%        id => list_to_atom( Endpoint ++"->" ++ Target ),
+%%        start => {http_broker_queue_service, start_link, [ Endpoint, Target ]},
+%%        restart => permanent,
+%%        shutdown => ?DEFAULT_STOP_TIMEOUT,
+%%        type => worker,
+%%        modules => [http_broker_queue_service]
+%%      } || Target <- maps:keys( Targets )
+%%      ]
+%%      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints )
+%%    ]),
+
+
+%%  MaxAgeService = #{
+%%    id => http_broker_max_age_service,
+%%    start => {http_broker_max_age_service, start_link, []},
+%%    restart => permanent,
+%%    shutdown => ?DEFAULT_STOP_TIMEOUT,
+%%    type => worker,
+%%    modules => [http_broker_max_age_service]
+%%  },
+%%  CleanupService = #{
+%%    id => http_broker_queue_cleanup_service,
+%%    start => {http_broker_queue_cleanup_service, start_link, []},
+%%    restart => permanent,
+%%    shutdown => ?DEFAULT_STOP_TIMEOUT,
+%%    type => worker,
+%%    modules => [http_broker_queue_cleanup_service]
+%%  },
+
   SupFlags = #{
     strategy => one_for_one,
     intensity => ?DEFAULT_MAX_RESTARTS,
     period => ?DEFAULT_MAX_PERIOD
   },
 
-  Listener = listener(http, ?ENV(port, #{})),
-
-  QueueService = #{
-    id => http_broker_queue_service,
-    start => {http_broker_queue_service, start_link, []},
-    restart => permanent,
-    shutdown => ?DEFAULT_STOP_TIMEOUT,
-    type => worker,
-    modules => [http_broker_queue_service]
-  },
-  MaxAgeService = #{
-    id => http_broker_max_age_service,
-    start => {http_broker_max_age_service, start_link, []},
-    restart => permanent,
-    shutdown => ?DEFAULT_STOP_TIMEOUT,
-    type => worker,
-    modules => [http_broker_max_age_service]
-  },
-  CleanupService = #{
-    id => http_broker_queue_cleanup_service,
-    start => {http_broker_queue_cleanup_service, start_link, []},
-    restart => permanent,
-    shutdown => ?DEFAULT_STOP_TIMEOUT,
-    type => worker,
-    modules => [http_broker_queue_cleanup_service]
-  },
-  SubscriptionsServer = #{
-    id=> esubscribe,
-    start=>{esubscribe,start_link,[?ESUBSCRIPTIONS]},
-    restart=>permanent,
-    shutdown=> ?DEFAULT_STOP_TIMEOUT,
-    type=>worker,
-    modules=>[esubscribe]
-  },
-
   {ok, {SupFlags, [
-    Listener,
-    QueueService,
-    MaxAgeService,
-    CleanupService
+    Listener
+%%    MaxAgeService,
+%%    CleanupService
+%%    | QueueServices
 %%    SubscriptionsServer
   ]}}.
 
-dispatch_rules() ->
-  Endpoints = http_broker_lib:get_endpoints(),
-  DispatchRules = [{"/" ++ Key, http_broker_acceptor, [Value]}
-    || {Key, Value} <- maps:to_list(Endpoints)],
+dispatch_rules( Endpoints ) ->
+
+  DispatchRules = [{Endpoint, http_broker_acceptor, Config}
+    || {Endpoint, Config} <- maps:to_list(Endpoints)],
 
   cowboy_router:compile([{'_', DispatchRules}]).
 
-
-listener(http, Port) when is_integer(Port) ->
-  #{
-    id => http_broker,
-    start => { cowboy, start_clear, [
-      http_broker,
-      [{port, Port}],
-      #{env => #{dispatch=> dispatch_rules()} }
-    ]},
-    restart => permanent,
-    shutdown => ?ENV(stop_timeout, ?DEFAULT_STOP_TIMEOUT),
-    type => worker,
-    modules => [cowboy]
-  };
-listener(_, _) ->
-  io:format("~nListener is not correct", []),
-  undefined.
 

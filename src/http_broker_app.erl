@@ -3,7 +3,7 @@
 %% | Author: Karimov Adilbek, @berikka10@gmail.com                |
 %% +--------------------------------------------------------------+
 
--module(http_broker).
+-module(http_broker_app).
 
 
 -export([start/2, stop/1]).

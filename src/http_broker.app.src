@@ -2,11 +2,12 @@
  [{description, "HTTP broker"},
   {vsn, git},
   {registered, []},
-  {mod, {http_broker, []}},
+  {mod, {http_broker_app, []}},
   {applications,
    [kernel,
     stdlib,
     cowboy,
+    esubscribe,
     zaya_rocksdb
    ]},
   {env,[]},

@@ -15,19 +15,24 @@
 -define(LOGDEBUG(Text), logger:debug(Text)).
 -define(LOGDEBUG(Text,Params), logger:debug(Text,Params)).
 
+-define(DEFAULT_LISTEN_PORT, 7000).
+
+%----------------Default supervisor settings------------------------------
 -define(DEFAULT_MAX_RESTARTS,10).
 -define(DEFAULT_MAX_PERIOD,1000).
--define(DEFAULT_SCAN_CYCLE,1000).
 -define(DEFAULT_STOP_TIMEOUT,600000). % 10 min.
 
--define(ESUBSCRIPTIONS, '$http_broker_subscriptions$').
+%----------------Services defaults-----------------------------------------
+-define(DEFAULT_SCAN_CYCLE,1000).
+
+
+-define(SUBSCRIPTIONS_SCOPE, '$http_broker_subscriptions$').
 
 -define(STARTING_ATTEMPT_VALUE, 0).
 
 -define(QUEUE(Endpoint,Ref), { queue, Endpoint, Ref}).
 -define(TARGET(Endpoint, Service, Ref),{ target, Endpoint, Service, Ref}).
 
--define(SET_ENV(Key,Value),application:set_env(http_broker,Key,Value)).
 -define(ENV(Key,Default),application:get_env(http_broker,Key,Default)).
 -define(ENV(OS,Config,Default),
   (fun()->
