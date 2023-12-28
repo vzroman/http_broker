@@ -20,10 +20,36 @@
   terminate/3
 ]).
 
-init(Request, Config) ->
+init(CowboyRequest, #{
+  strategy := Strategy,
+  targets := Targets
+} = Config) ->
+
+  { Body, CowboyRequest1} = read_body( CowboyRequest ),
+
+  Request = #request{
+    method = cowboy_req:method(CowboyRequest1),
+    headers = cowboy_req:headers(CowboyRequest1),
+    body = Body
+  },
+
+  {Target, Response} = handle_req( Targets, Request),
+
+  #response{
+    code = ResponseCode,
+    headers = ResponseHeaders,
+    body = ResponseBody
+  } = Response,
+
+  if
+    Strategy =:= all andalso (ResponseCode >= 200 orelse ResponseCode =< 299)  ->
+      queue_request(Request, rest_targets( Target, Targets ) );
+    true ->
+      ignore
+  end,
 
 
-  Response = handle_req( Config, Request ),
+  CowboyResponse = cowboy_req:reply(ResponseCode, ResponseHeaders, ResponseBody, CowboyRequest1),
 
 %%  Response = cowboy_req:reply(200, #{}, <<"">>, Req),
 %%
@@ -34,26 +60,25 @@ init(Request, Config) ->
 %%  HTTPBody0 = http_broker_lib:get_http_body(Response),
 %%  HTTPHeaders0 = http_broker_lib:get_http_headers(Response),
 %%  Response2 = cowboy_req:reply(200, HTTPBody0, HTTPHeaders0, Req0),
-  {ok, Response, Config}.
+  {ok, CowboyResponse, Config}.
 
 
 terminate(_Reason, _Req, _State) ->
   ok.
 
-handle_req( #{ strategy := one, targets := Targets}, Request )->
-
-
-  { Body, Request1} = read_body( Request ),
-
-  TargetsByOrder =
-    maps:groups_from_list(fun({ _Target, Config })->maps:get( order, Config, 0 )  end , maps:to_list(Targets) ),
-
-  try_send(maps:to_list( TargetsByOrder ), #request{
-    method = cowboy_req:method(Request1),
-    headers = cowboy_req:headers(Request1),
-    body = Body
-  }).
-
+handle_req( Targets, Request )->
+  {Target, RestTargets } = pick_target( Targets ),
+  case send_to_target( Target, Request ) of
+    {ok, Response} ->
+      {Target, Response};
+    {error, Response}->
+      if
+        map_size( RestTargets ) =:= 0 ->
+          {Target, Response};
+        true ->
+          try_send( RestTargets, Request )
+      end
+  end.
 
 
 read_body( Req )->
@@ -67,5 +92,3 @@ read_body( Req, Body )->
   end.
 
 
-try_send( Targets, Request)->
-  {Target, RestTargets } =

@@ -91,9 +91,15 @@ init([]) ->
 
 dispatch_rules( Endpoints ) ->
 
-  DispatchRules = [{Endpoint, http_broker_acceptor, Config}
-    || {Endpoint, Config} <- maps:to_list(Endpoints)],
+  DispatchRules =
+    [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ) } }
+    || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
 
   cowboy_router:compile([{'_', DispatchRules}]).
 
+targets_by_order( Targets )->
 
+  GroupsByOrder =
+    maps:groups_from_list(fun({ _Target, Config })->maps:get( order, Config, 0 )  end , maps:to_list(Targets) ),
+
+  lists:sort( maps:to_list( GroupsByOrder ) ).
