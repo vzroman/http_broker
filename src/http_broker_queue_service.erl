@@ -8,7 +8,7 @@
 -include("http_broker.hrl").
 
 -export([
-  start_link/0,
+  start_link/2,
   init/1,
   handle_call/3,
   handle_cast/2,
@@ -17,82 +17,59 @@
   code_change/3
 ]).
 
--record(state, {db_ref, timer_ref}).
-
 %% ====================================================================
 %% Gen server functions
 %% ====================================================================
-start_link() ->
-  PID = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
+start_link(Endpoint, Target) ->
+  PID = gen_server:start_link(?MODULE, [Endpoint, Target], []),
   PID.
 
-init([]) ->
-  DBRef = http_broker_lib:queue_directory(),
-  TimerRef = erlang:start_timer(1000, self(), {send_message, self()}),
-  {ok, #state{db_ref = DBRef, timer_ref = TimerRef}}.
+init([Endpoint, Target]) ->
+  TimerRef = erlang:start_timer(1000, self(), {send_message, Endpoint, Target}),
+  {ok, TimerRef}.
 
-handle_call(_Request, _From, State) ->
-  {reply, ok, State}.
+handle_call(_Request, _From, TimerRef) ->
+  {reply, ok, TimerRef}.
 
-handle_info({timeout, _TimerRef, {send_message, _Pid}}, State) ->
-  scan_queue(State#state.db_ref),
-  erlang:cancel_timer(State#state.timer_ref),
-  NewTimerRef = erlang:start_timer(1000, self(), {send_message, self()}),
-  {noreply, State#state{timer_ref = NewTimerRef}}.
+handle_info({timeout, _TimerRef, {send_message, Endpoint, Target}}, _TimerRef) ->
+  collect_data(Endpoint, Target),
+  NewTimerRef = erlang:start_timer(?ENV(retry_cycle, #{}), self(), {send_message, Endpoint, Target}),
+  {noreply, NewTimerRef}.
 
-handle_cast(_Msg, State) ->
-  {noreply, State}.
+handle_cast(_Msg, TimerRef) ->
+  {noreply, TimerRef}.
 
 %%======================================================================
 %%  Stopping
 %%======================================================================
-terminate(_Reason, State) ->
-  zaya_rocksdb:close(State#state.db_ref),
+terminate(_Reason, _TimerRef) ->
   ok.
 
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+code_change(_OldVsn, TimerRef, _Extra) ->
+  {ok, TimerRef}.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-scan_queue(DBRef) ->
-  Endpoints = http_broker_lib:get_endpoints(),
-  Targets = http_broker_lib:get_names_and_urls(Endpoints),
-  lists:foreach(
-    fun({EndpointName, URL}) ->
-      collect_data(DBRef, {EndpointName, URL})
-    end,
-    Targets
-  ).
+collect_data(Endpoint, Target) ->
+  QueueDB = persistent_term:get(db_ref),
+  case zaya_rocksdb:next(QueueDB, ?TARGET(Endpoint, Target, '_')) of
+    {?TARGET(Endpoint, Target, {TS, Ref}), Attempts} ->
 
-collect_data(DBRef, {EndpointName, URL}) ->
-  case zaya_rocksdb:next(DBRef, {target, EndpointName, URL, '_'}) of
-    {{_Type, EndpointName, Service, {TS, Ref}}, Attempts} ->
-      case zaya_rocksdb:next(DBRef, {queue, {-1, Ref}}) of
-        {_MessageKey, [HTTPHeaders, HTTPBody]} ->
-          send_message_to_target(DBRef, {?TARGET(EndpointName, Service, {TS, Ref}), Attempts}, [HTTPHeaders, HTTPBody]);
+      case zaya_rocksdb:next(QueueDB, {queue, {-1, Ref}}) of
+        {{queue, Endpoint, {TS, Ref}}, {request, Method, Headers, Body}} ->
+          send_message_to_target(QueueDB, {?TARGET(Endpoint, Target, {TS, Ref}), Attempts}, {Method, Headers, Body});
         _ ->
-          ?LOGINFO("No more messages in the queue for target ~p.", [{EndpointName, URL}]),
-          delete_from_queue(DBRef, [{?TARGET(EndpointName, Service, Ref)}])
+          ?LOGINFO("No more messages in the queue for target ~p.", [Endpoint ++ "->" ++ Target]),
+          zaya_rocksdb:delete(QueueDB, [?TARGET(Endpoint, Target, {TS, Ref})])
       end;
-    _ ->
-      ok
+    _ -> ok
   end.
 
-send_message_to_target(DBRef, {?TARGET(EndpointName, Service, {TS, EndpointRef}), Attempts}, [HTTPHeaders, HTTPBody]) ->
-  case http_broker_lib:send_request_to_target(list_to_binary(Service), HTTPHeaders, HTTPBody) of
+send_message_to_target(QueueDB, {?TARGET(Endpoint, Service, {TS, EndpointRef}), Attempts}, {Method, HTTPHeaders, HTTPBody}) ->
+  case http_broker_acceptor:send_to_target(list_to_binary(Service), {Method, HTTPHeaders, HTTPBody}) of
     {ok, _Response} ->
-      ?LOGINFO("ALL STRATEGY: Successfully sent to target: ~p~n", [{EndpointName, Service}]),
-      delete_from_queue(DBRef, {?TARGET(EndpointName, Service, {TS, EndpointRef})});
+      zaya_rocksdb:delete(QueueDB, [{?TARGET(Endpoint, Service, {TS, EndpointRef})}]);
     {error, _Error} ->
-      ?LOGINFO("ALL STRATEGY: Failed to send to target: ~p~n", [{EndpointName, Service}]),
-      update_attempts(DBRef, {?TARGET(EndpointName, Service, {TS, EndpointRef}), Attempts + 1})
+      zaya_rocksdb:write(QueueDB, {?TARGET(Endpoint, Service, {TS, EndpointRef}), Attempts + 1})
   end.
-
-delete_from_queue(DBRef, {?TARGET(EndpointName, Service, {TS, EndpointRef})}) ->
-  zaya_rocksdb:delete(DBRef, [{?TARGET(EndpointName, Service, {TS, EndpointRef})}]).
-
-update_attempts(DBRef, {?TARGET(EndpointName, Service, {TS, EndpointRef}), Attempts}) ->
-  zaya_rocksdb:write(DBRef, [{?TARGET(EndpointName, Service, {TS, EndpointRef}), Attempts}]).
-
