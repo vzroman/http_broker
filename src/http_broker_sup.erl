@@ -46,18 +46,17 @@ init([]) ->
 
   %-----------------Queue services----------------------------
   QueueServices =
-    lists:append([
-      [ #{
+    [
+      #{
         id => list_to_atom( Endpoint ++"->" ++ Target ),
         start => {http_broker_queue_service, start_link, [ Endpoint, Target ]},
         restart => permanent,
         shutdown => ?DEFAULT_STOP_TIMEOUT,
         type => worker,
         modules => [http_broker_queue_service]
-      } || Target <- maps:keys( Targets )
-      ]
-      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints )
-    ]),
+      }
+      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints ), Target <- maps:to_list( Targets )
+    ],
   MaxAgeService = #{
     id => http_broker_max_age_service,
     start => {http_broker_max_age_service, start_link, []},
