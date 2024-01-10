@@ -17,6 +17,8 @@ start_link() ->
 
 init([]) ->
 
+ http_broker_queue:on_init(),
+
   %------------------Listener-----------------------------
   Port = ?ENV(port, ?DEFAULT_LISTEN_PORT),
   SSL = ?ENV(ssl, []),
@@ -43,37 +45,43 @@ init([]) ->
     },
 
   %-----------------Queue services----------------------------
-%%  QueueServices =
-%%    lists:append([
-%%      [ #{
-%%        id => list_to_atom( Endpoint ++"->" ++ Target ),
-%%        start => {http_broker_queue_service, start_link, [ Endpoint, Target ]},
-%%        restart => permanent,
-%%        shutdown => ?DEFAULT_STOP_TIMEOUT,
-%%        type => worker,
-%%        modules => [http_broker_queue_service]
-%%      } || Target <- maps:keys( Targets )
-%%      ]
-%%      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints )
-%%    ]),
-
-
-%%  MaxAgeService = #{
-%%    id => http_broker_max_age_service,
-%%    start => {http_broker_max_age_service, start_link, []},
-%%    restart => permanent,
-%%    shutdown => ?DEFAULT_STOP_TIMEOUT,
-%%    type => worker,
-%%    modules => [http_broker_max_age_service]
-%%  },
-%%  CleanupService = #{
-%%    id => http_broker_queue_cleanup_service,
-%%    start => {http_broker_queue_cleanup_service, start_link, []},
-%%    restart => permanent,
-%%    shutdown => ?DEFAULT_STOP_TIMEOUT,
-%%    type => worker,
-%%    modules => [http_broker_queue_cleanup_service]
-%%  },
+  QueueServices =
+    lists:append([
+      [ #{
+        id => list_to_atom( Endpoint ++"->" ++ Target ),
+        start => {http_broker_queue_service, start_link, [ Endpoint, Target ]},
+        restart => permanent,
+        shutdown => ?DEFAULT_STOP_TIMEOUT,
+        type => worker,
+        modules => [http_broker_queue_service]
+      } || Target <- maps:keys( Targets )
+      ]
+      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints )
+    ]),
+  MaxAgeService = #{
+    id => http_broker_max_age_service,
+    start => {http_broker_max_age_service, start_link, []},
+    restart => permanent,
+    shutdown => ?DEFAULT_STOP_TIMEOUT,
+    type => worker,
+    modules => [http_broker_max_age_service]
+  },
+  CleanupService = #{
+    id => http_broker_queue_cleanup_service,
+    start => {http_broker_queue_cleanup_service, start_link, []},
+    restart => permanent,
+    shutdown => ?DEFAULT_STOP_TIMEOUT,
+    type => worker,
+    modules => [http_broker_queue_cleanup_service]
+  },
+  SubscriptionsServer = #{
+    id=>esubscribe,
+    start=>{esubscribe,start_link,[ ?SUBSCRIPTIONS_SCOPE ]},
+    restart=>permanent,
+    shutdown=> ?DEFAULT_STOP_TIMEOUT,
+    type=>worker,
+    modules=>[esubscribe]
+  },
 
   SupFlags = #{
     strategy => one_for_one,
@@ -82,24 +90,24 @@ init([]) ->
   },
 
   {ok, {SupFlags, [
-    Listener
-%%    MaxAgeService,
-%%    CleanupService
-%%    | QueueServices
-%%    SubscriptionsServer
+    Listener,
+    MaxAgeService,
+    CleanupService,
+    SubscriptionsServer
+    | QueueServices
   ]}}.
 
 dispatch_rules( Endpoints ) ->
-
   DispatchRules =
     [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ), endpoint => Endpoint } }
     || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
-
   cowboy_router:compile([{'_', DispatchRules}]).
 
 targets_by_order( Targets )->
-
   GroupsByOrder =
-    maps:groups_from_list(fun({ _Target, Config })->maps:get( order, Config, 0 )  end , maps:to_list(Targets) ),
-
+    maps:groups_from_list(
+      fun({ _Target, Config })->
+        maps:get( order, Config, 0 )
+      end , maps:to_list(Targets)
+    ),
   lists:sort( maps:to_list( GroupsByOrder ) ).

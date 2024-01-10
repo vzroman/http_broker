@@ -6,6 +6,8 @@
 -ifndef(http_broker).
 -define(http_broker, 1).
 
+-define(DB_REF, {http_broker, '@db_ref@'}).
+
 -define(LOGERROR(Text), logger:error(Text)).
 -define(LOGERROR(Text,Params), logger:error( Text, Params)).
 -define(LOGWARNING(Text), logger:warning(Text)).

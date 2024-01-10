@@ -17,69 +17,47 @@
   code_change/3
 ]).
 
--record(state, {db_ref, timer_ref}).
-
 %% ====================================================================
 %% Gen server functions
 %% ====================================================================
 start_link() ->
-  PID = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
+  PID = gen_server:start_link(?MODULE, [], []),
   PID.
 
 init([]) ->
-  DBRef = http_broker_lib:queue_directory(),
   TimerRef = erlang:start_timer(1000, self(), {cleanup, self()}),
-  {ok, #state{db_ref = DBRef, timer_ref = TimerRef}}.
+  {ok, TimerRef}.
 
-handle_call(_Request, _From, State) ->
-  {reply, ok, State}.
+handle_call(_Request, _From, TimerRef) ->
+  {reply, ok, TimerRef}.
 
-handle_info({timeout, _TimerRef, {cleanup, _Pid}}, State) ->
-  scan_queue(State#state.db_ref),
-  erlang:cancel_timer(State#state.timer_ref),
+handle_info({timeout, _TimerRef, {cleanup, _PID}}, _) ->
+  cleanup_queue(),
   NewTimerRef = erlang:start_timer(1000, self(), {cleanup, self()}),
-  {noreply, State#state{timer_ref = NewTimerRef}}.
+  {noreply, NewTimerRef}.
 
-handle_cast(_Msg, State) ->
-  {noreply, State}.
+handle_cast(_Msg, TimerRef) ->
+  {noreply, TimerRef}.
 
 %%======================================================================
 %%  Stopping
 %%======================================================================
-terminate(_Reason, State) ->
-  zaya_rocksdb:close(State#state.db_ref),
+terminate(_Reason, _TimerRef) ->
   ok.
 
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+code_change(_OldVsn, TimerRef, _Extra) ->
+  {ok, TimerRef}.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-scan_queue(DBRef) ->
-  Endpoints = http_broker_lib:get_endpoints(),
-  Queues = maps:keys(Endpoints),
-  lists:foreach(
-    fun(EndpointName) ->
-      collect_data(DBRef, EndpointName)
-    end,
-    Queues
-  ).
-
-collect_data(DBRef, Endpoint) ->
-  case zaya_rocksdb:next(DBRef, {queue, Endpoint, '_'}) of
-    {{_Type, EndpointName, {TS, Ref}}, _Message} ->
-      case zaya_rocksdb:next(DBRef, {target, "_", "_", {-1, Ref}}) of
-        {{_Type, _EndpointName, _Service, {_TargetTS, _TargetRef}}, _Attempts} ->
-          ok;
-        _L ->
-          ?LOGINFO("No more targets in the queue for ~p.", [EndpointName]),
-          ?LOGINFO("L: ~p", [_L]),
-          delete_from_queue(DBRef, {?QUEUE(EndpointName, {TS, Ref})})
+cleanup_queue() ->
+  QueueDB = persistent_term:get(db_ref),
+  case zaya_rocksdb:next(QueueDB, ?QUEUE('_', -1)) of
+    {?QUEUE(Endpoint, Ref), _Message} ->
+      case zaya_rocksdb:next(QueueDB, ?TARGET(Endpoint, '_', Ref)) of
+        undefined -> zaya_rocksdb:delete(QueueDB, ?QUEUE(Endpoint, Ref));
+        _ -> ok
       end;
-    _ ->
-      ok
+    undefined -> ok
   end.
-
-delete_from_queue(DBRef, {?QUEUE(EndpointName, {TS, EndpointRef})}) ->
-  zaya_rocksdb:delete(DBRef, [{?QUEUE(EndpointName, {TS, EndpointRef})}]).
