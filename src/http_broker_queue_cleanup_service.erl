@@ -17,47 +17,49 @@
   code_change/3
 ]).
 
+-define(DEFAULT_CYCLE, 3600).
+
+-record(state,{ cycle }).
+
 %% ====================================================================
 %% Gen server functions
 %% ====================================================================
 start_link() ->
-  PID = gen_server:start_link(?MODULE, [], []),
-  PID.
+  gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  TimerRef = erlang:start_timer(1000, self(), {cleanup, self()}),
-  {ok, TimerRef}.
+  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE) * 1000,
+  self() ! on_cycle,
+  {ok, #state{ cycle = Cycle }}.
 
-handle_call(_Request, _From, TimerRef) ->
-  {reply, ok, TimerRef}.
+handle_call(Request, _From, State) ->
+  ?LOGWARNING("unexpected call request to cleanup service: ~p",[ Request ]),
+  {noreply, State}.
 
-handle_info({timeout, _TimerRef, {cleanup, _PID}}, _) ->
-  cleanup_queue(),
-  NewTimerRef = erlang:start_timer(1000, self(), {cleanup, self()}),
-  {noreply, NewTimerRef}.
+handle_cast(Message, State) ->
+  ?LOGWARNING("unexpected cast message to cleanup service: ~p",[ Message ]),
+  {noreply, State}.
 
-handle_cast(_Msg, TimerRef) ->
-  {noreply, TimerRef}.
+handle_info(on_cycle, #state{ cycle = Cycle } =State) ->
+
+  timer:send_after(Cycle, on_cycle),
+
+  try http_broker_queue:purge()
+  catch
+    _:E:S -> ?LOGERROR("error on purging queue, error ~p, stack ~p",[ E, S ])
+  end,
+
+  {noreply, State};
+
+handle_info(Message, State) ->
+  ?LOGWARNING("unexpected info message to cleanup service: ~p",[ Message ]),
+  {noreply, State}.
 
 %%======================================================================
 %%  Stopping
 %%======================================================================
-terminate(_Reason, _TimerRef) ->
+terminate(_Reason, _State) ->
   ok.
 
-code_change(_OldVsn, TimerRef, _Extra) ->
-  {ok, TimerRef}.
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-cleanup_queue() ->
-  QueueDB = persistent_term:get(db_ref),
-  case zaya_rocksdb:next(QueueDB, ?QUEUE('_', -1)) of
-    {?QUEUE(Endpoint, Ref), _Message} ->
-      case zaya_rocksdb:next(QueueDB, ?TARGET(Endpoint, '_', Ref)) of
-        undefined -> zaya_rocksdb:delete(QueueDB, ?QUEUE(Endpoint, Ref));
-        _ -> ok
-      end;
-    undefined -> ok
-  end.
+code_change(_OldVsn, State, _Extra) ->
+  {ok, State}.

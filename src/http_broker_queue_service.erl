@@ -34,8 +34,13 @@ init([Endpoint, Target]) ->
 
   {ok, #state{ endpoint = Endpoint, target = Target, cycle = Cycle }}.
 
-handle_call(_Request, _From, TimerRef) ->
-  {reply, ok, TimerRef}.
+handle_call(Request, _From, State) ->
+  ?LOGWARNING("unexpected call request to send target service: ~p",[ Request ]),
+  {noreply, State}.
+
+handle_cast(Message, State) ->
+  ?LOGWARNING("unexpected cast message to send target service: ~p",[ Message ]),
+  {noreply, State}.
 
 %%---------------THE LOOP----------------------------------------------
 handle_info(on_cycle, #state{cycle = Cycle, endpoint = Endpoint, target = Target} = State) ->
@@ -60,11 +65,16 @@ handle_info({?SUBSCRIPTIONS_SCOPE, Endpoint, enqueue_request, _Node, _Actor}, #s
       ?LOGERROR("unable to handle queue ~p:~p, error ~p, stack ~p",[ Endpoint, Target, E, S ])
   end,
 
+  {noreply, State};
+
+handle_info(Message, State) ->
+
+  ?LOGWARNING("unexpected info message to send target service: ~p",[ Message ]),
+
   {noreply, State}.
 
 
-handle_cast(_Msg, TimerRef) ->
-  {noreply, TimerRef}.
+
 
 %%======================================================================
 %%  Stopping

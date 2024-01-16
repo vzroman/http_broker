@@ -11,7 +11,10 @@
   next_queue/2,
   remove_queue/3,
 
-  invalid_attempt/3
+  invalid_attempt/3,
+
+  purge/0,
+  purge_until/1
 ]).
 
 on_init() ->
@@ -73,3 +76,67 @@ invalid_attempt( Endpoint, Service, Ref )->
     _->
       ok
   end.
+
+purge()->
+  DB = persistent_term:get(?DB_REF),
+  Endpoints = ?ENV(endpoints, #{}),
+  purge( DB, zaya_rocksdb:next(DB, ?QUEUE('_', '_')), Endpoints ).
+purge( DB, {?QUEUE(Endpoint, _Ref) = Queue, _Request}, Endpoints )->
+  case Endpoints of
+    #{ Endpoint := Targets } ->
+      case check_targets( DB, Queue, zaya_rocksdb:next( DB, ?TARGET(Endpoint, '_', '_') ), Targets, _Count = 0 ) of
+        TargetsCount when TargetsCount > 0->
+          % there are still not sent targets in the queue for the request
+          keep_the_request;
+        0 ->
+          % The request is delivered, it can be purged
+          zaya_rocksdb:delete( DB, [Queue] )
+      end;
+    _->
+      % The endpoint doesn't exist in the config
+      purge_queue(DB, Queue, zaya_rocksdb:next( DB, ?TARGET(Endpoint, '_', '_') ))
+  end,
+
+  purge( DB, zaya_rocksdb:next(DB, Queue), Endpoints );
+purge( _DB, _Other, _Endpoints )->
+  % There are no more tasks in the queue
+  ok.
+
+purge_until( Timestamp )->
+  DB = persistent_term:get(?DB_REF),
+  purge_until( DB, zaya_rocksdb:next(DB, ?QUEUE('_', '_')), Timestamp ).
+purge_until( DB, {?QUEUE(Endpoint, {TS, _Ref}) = Queue, _Request}, Timestamp )->
+  if
+    TS < Timestamp ->
+      % The request is older than the max age
+      purge_queue(DB, Queue, zaya_rocksdb:next( DB, ?TARGET(Endpoint, '_', '_') ));
+    true ->
+      ignore
+  end,
+  purge_until( DB, zaya_rocksdb:next(DB, Queue), Timestamp );
+purge_until( _DB, _Other, _Timestamp )->
+  ok.
+
+
+check_targets( DB, ?QUEUE(Endpoint, Ref)=Queue, {?TARGET(Endpoint, Service, Ref) = Target, _Attempts}, Targets, Count )->
+
+  Count1 =
+    case Targets of
+      #{ Service := _} ->
+        Count + 1;
+      _->
+        % The target is not in the config any more
+        zaya:delete(DB, [Target]),
+        Count
+    end,
+
+  check_targets( DB, Queue, zaya_rocksdb:next( DB, Target ), Targets, Count1 );
+
+check_targets( _DB, _Queue, _Other, _Targets, Count )->
+  Count.
+
+purge_queue(DB, ?QUEUE(Endpoint, Ref)=Queue, {?TARGET(Endpoint, _Service, Ref) = Target, _Attempts})->
+  zaya:delete(DB, [Target]),
+  purge_queue(DB, Queue, zaya_rocksdb:next( DB, Target ));
+purge_queue(DB, Queue, _Other)->
+  zaya:delete(DB, [Queue]).

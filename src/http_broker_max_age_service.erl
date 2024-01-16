@@ -17,27 +17,45 @@
   code_change/3
 ]).
 
+-define(DEFAULT_CYCLE, 3600).
+-define(DEFAULT_MAX_AGE, 30).
+
+-record(state,{ cycle }).
+
 %% ====================================================================
 %% Gen server functions
 %% ====================================================================
 start_link() ->
-  PID = gen_server:start_link(?MODULE, [], []),
-  PID.
+  gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  TimerRef = erlang:start_timer(1000, self(), {max_age, self()}),
-  {ok, TimerRef}.
+  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE) * 1000,
+  self() ! on_cycle,
+  {ok, #state{ cycle = Cycle}}.
 
-handle_call(_Request, _From, TimerRef) ->
-  {reply, ok, TimerRef}.
+handle_call(Request, _From, State) ->
+  ?LOGWARNING("unexpected call request to max age service: ~p",[ Request ]),
+  {noreply, State}.
 
-handle_info({timeout, _TimerRef, {max_age, _PID}}, _) ->
-  collect_data(),
-  NewTimerRef = erlang:start_timer(1000, self(), {max_age, self()}),
-  {noreply, NewTimerRef}.
+handle_cast(Message, State) ->
+  ?LOGWARNING("unexpected cast message to max age service: ~p",[ Message ]),
+  {noreply, State}.
 
-handle_cast(_Msg, TimerRef) ->
-  {noreply, TimerRef}.
+handle_info(on_cycle, #state{ cycle = Cycle } = State) ->
+
+  timer:send_after(Cycle, on_cycle),
+
+  MaxAge = ?ENV( max_age, ?DEFAULT_MAX_AGE ) * 86400000,
+  try http_broker_queue:purge_until( erlang:system_time(millisecond) - MaxAge )
+  catch
+    _:E:S -> ?LOGERROR("error on purging queue on max age, error ~p, stack ~p",[ E, S ])
+  end,
+
+  {noreply, State};
+
+handle_info(Message, State) ->
+  ?LOGWARNING("unexpected info message to max age service: ~p",[ Message ]),
+  {noreply, State}.
 
 %%======================================================================
 %%  Stopping
@@ -47,42 +65,3 @@ terminate(_Reason, _TimerRef) ->
 
 code_change(_OldVsn, TimerRef, _Extra) ->
   {ok, TimerRef}.
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-collect_data() ->
-  QueueDB = persistent_term:get(db_ref),
-  process_queue(QueueDB, ?ENV(endpoints, #{})),
-  process_targets(QueueDB).
-
-process_queue(QueueDB, Config) ->
-  case zaya_rocksdb:next(QueueDB, ?QUEUE('_', -1)) of
-    {?QUEUE(Endpoint, Ref = {TS, _TargetRef}), _Message} ->
-
-      % Calculate age
-      MaxAge = ?ENV(max_age, #{}),
-      MaxAgeMilliSec = MaxAge * 24 * 60 * 60 * 1000,
-      case MaxAgeMilliSec > TS of
-        true -> zaya_rocksdb:delete(QueueDB, [?QUEUE(Endpoint, Ref)]);
-        false -> ok
-      end,
-
-      % Check if Endpoint is present in the configuration
-      case maps:find(Endpoint, Config) of
-        error -> zaya_rocksdb:delete(QueueDB, [?QUEUE(Endpoint, Ref)]);
-        {ok, _Result} -> ok
-      end;
-    _ ->
-      ok
-  end.
-
-process_targets(QueueDB) ->
-  case zaya_rocksdb:next(QueueDB, ?TARGET('_', '_', -1)) of
-    {?TARGET(Endpoint, Service, Ref), _Message} ->
-      case zaya_rocksdb:next(QueueDB, {queue, Endpoint, Ref}) of
-        undefined -> zaya_rocksdb:delete(QueueDB, ?TARGET(Endpoint, Service, Ref));
-        _ -> ok
-      end;
-    _ -> ok
-  end.
