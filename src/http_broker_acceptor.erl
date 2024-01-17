@@ -58,7 +58,11 @@ init(CowboyRequest, #{
       ignore
   end,
 
-  AdaptedHeaders = maps:from_list( ResponseHeaders ),
+  AdaptedHeaders =
+    maps:from_list( [ {
+      unicode:characters_to_binary( Header ),
+      unicode:characters_to_binary( Value )
+    } || {Header, Value} <- ResponseHeaders ] ),
   CowboyResponse = cowboy_req:reply(ResponseCode, AdaptedHeaders, ResponseBody, CowboyRequest1),
   {ok, CowboyResponse, Config}.
 
@@ -113,7 +117,7 @@ send_to_target({URL, Params}, #request{
 
   ContentType =
     case Headers of
-      #{ <<"content-type">> := _CT } -> _CT;
+      #{ <<"content-type">> := _CT } -> unicode:characters_to_list( _CT );
       _-> "application/json"
     end,
 

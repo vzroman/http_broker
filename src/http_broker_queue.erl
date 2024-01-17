@@ -83,7 +83,7 @@ purge()->
   purge( DB, zaya_rocksdb:next(DB, ?QUEUE('_', '_')), Endpoints ).
 purge( DB, {?QUEUE(Endpoint, _Ref) = Queue, _Request}, Endpoints )->
   case Endpoints of
-    #{ Endpoint := Targets } ->
+    #{ Endpoint := #{ targets := Targets } } ->
       case check_targets( DB, Queue, zaya_rocksdb:next( DB, ?TARGET(Endpoint, '_', '_') ), Targets, _Count = 0 ) of
         TargetsCount when TargetsCount > 0->
           % there are still not sent targets in the queue for the request
