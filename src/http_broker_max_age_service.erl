@@ -29,7 +29,7 @@ start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE) * 1000,
+  Cycle = ?ENV(max_age_cycle, ?DEFAULT_CYCLE) * 1000,
   self() ! on_cycle,
   {ok, #state{ cycle = Cycle}}.
 
