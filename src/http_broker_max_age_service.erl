@@ -17,8 +17,14 @@
   code_change/3
 ]).
 
+-define(MIN_CYCLE, 1).
+-define(MIN_AGE, 1).
+
+-define(MAX_AGE, 365).
+-define(MAX_CYCLE, 3600).
+
 -define(DEFAULT_CYCLE, 3600).
--define(DEFAULT_MAX_AGE, 30).
+-define(DEFAULT_AGE, 30).
 
 -record(state,{ cycle }).
 
@@ -29,9 +35,12 @@ start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  Cycle = ?ENV(max_age_cycle, ?DEFAULT_CYCLE) * 1000,
+  Cycle = ?ENV(max_age_cycle, ?DEFAULT_CYCLE),
+  CorrectedCycle = http_broker_queue:check_settings(Cycle, ?MIN_CYCLE, ?MAX_CYCLE),
+  CycleMilliseconds = CorrectedCycle * 1000,
+
   self() ! on_cycle,
-  {ok, #state{ cycle = Cycle}}.
+  {ok, #state{ cycle = CycleMilliseconds}}.
 
 handle_call(Request, _From, State) ->
   ?LOGWARNING("unexpected call request to max age service: ~p",[ Request ]),
@@ -43,10 +52,13 @@ handle_cast(Message, State) ->
 
 handle_info(on_cycle, #state{ cycle = Cycle } = State) ->
 
+  Age = ?ENV(max_age, ?DEFAULT_AGE),
+  CorrectedAge = http_broker_queue:check_settings(Age, ?MIN_AGE, ?MAX_AGE),
+  CalculatedAge = CorrectedAge * 86400000,
+
   timer:send_after(Cycle, on_cycle),
 
-  MaxAge = ?ENV( max_age, ?DEFAULT_MAX_AGE ) * 86400000,
-  try http_broker_queue:purge_until( erlang:system_time(millisecond) - MaxAge )
+  try http_broker_queue:purge_until( erlang:system_time(millisecond) - CalculatedAge )
   catch
     _:E:S -> ?LOGERROR("error on purging queue on max age, error ~p, stack ~p",[ E, S ])
   end,

@@ -18,6 +18,11 @@
 -define(LOGDEBUG(Text,Params), logger:debug(Text,Params)).
 
 -define(DEFAULT_LISTEN_PORT, 7000).
+-define(MIN_LISTEN_PORT, 0).
+-define(MAX_LISTEN_PORT, 65535).
+
+-define(DEFAULT_ORDER, 0).
+-define(MIN_ORDER, 0).
 
 %----------------Default supervisor settings------------------------------
 -define(DEFAULT_MAX_RESTARTS,10).

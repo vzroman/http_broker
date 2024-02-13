@@ -17,6 +17,10 @@
   code_change/3
 ]).
 
+-define(MIN_CYCLE, 1).
+-define(MAX_CYCLE, 3600000).
+-define(DEFAULT_CYCLE, 1000).
+
 -record(state,{ endpoint, target, cycle }).
 %% ====================================================================
 %% Gen server functions
@@ -26,13 +30,13 @@ start_link(Endpoint, Target) ->
 
 init([Endpoint, Target]) ->
 
-  Cycle = ?ENV(retry_cycle, 1000),
-
+  Cycle = ?ENV(retry_cycle, ?DEFAULT_CYCLE),
+  CorrectedCycle = http_broker_queue:check_settings(Cycle, ?MIN_CYCLE, ?MAX_CYCLE),
   esubscribe:subscribe(?SUBSCRIPTIONS_SCOPE, Endpoint, _PID=self(), _Nodes = [node()]),
 
   self() ! on_cycle,
 
-  {ok, #state{ endpoint = Endpoint, target = Target, cycle = Cycle }}.
+  {ok, #state{ endpoint = Endpoint, target = Target, cycle = CorrectedCycle }}.
 
 handle_call(Request, _From, State) ->
   ?LOGWARNING("unexpected call request to send target service: ~p",[ Request ]),

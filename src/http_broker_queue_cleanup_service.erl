@@ -17,6 +17,8 @@
   code_change/3
 ]).
 
+-define(MIN_CYCLE, 1).
+-define(MAX_CYCLE, 3600).
 -define(DEFAULT_CYCLE, 3600).
 
 -record(state,{ cycle }).
@@ -28,9 +30,12 @@ start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE) * 1000,
+  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE),
+  CorrectedCycle = http_broker_queue:check_settings(Cycle, ?MIN_CYCLE, ?MAX_CYCLE),
+  CycleMilliseconds = CorrectedCycle * 1000,
+
   self() ! on_cycle,
-  {ok, #state{ cycle = Cycle }}.
+  {ok, #state{ cycle = CycleMilliseconds }}.
 
 handle_call(Request, _From, State) ->
   ?LOGWARNING("unexpected call request to cleanup service: ~p",[ Request ]),

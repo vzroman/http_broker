@@ -17,6 +17,12 @@
   purge_until/1
 ]).
 
+% Internal functions
+-export([
+  check_settings/3,
+  check_settings/2
+]).
+
 on_init() ->
 
   %------------------Queue Dir-----------------------------
@@ -32,6 +38,22 @@ on_init() ->
   persistent_term:put(?DB_REF, Ref),
   ok.
 
+check_settings(ValueIn, MinValue, MaxValue) ->
+  case ValueIn of
+    ValueOut when ValueOut >= MinValue, ValueOut =< MaxValue ->
+      ValueOut;
+    _InvalidValue ->
+      ?LOGERROR("Invalid settings for: ~p, ~p", [ValueIn, _InvalidValue]),
+      exit(invalid_value)
+  end.
+check_settings(ValueIn, MinValue) ->
+  case ValueIn of
+    ValueOut when ValueOut >= MinValue ->
+      ValueOut;
+    _InvalidValue ->
+      ?LOGERROR("Invalid settings for: ~p, ~p", [ValueIn, _InvalidValue]),
+      exit(invalid_value)
+  end.
 
 enqueue(Request, Endpoint, Targets)->
 

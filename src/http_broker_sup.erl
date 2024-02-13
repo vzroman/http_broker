@@ -21,6 +21,7 @@ init([]) ->
 
   %------------------Listener-----------------------------
   Port = ?ENV(port, ?DEFAULT_LISTEN_PORT),
+  CorrectedPort = http_broker_queue:check_settings(Port, ?MIN_LISTEN_PORT, ?MAX_LISTEN_PORT),
   SSL = ?ENV(ssl, []),
   ListenerType =
     if
@@ -35,7 +36,7 @@ init([]) ->
       id=>http_listener,
       start=>{ cowboy ,ListenerType ,[
         http_listener,
-        [ {port, Port} | SSL],
+        [ {port, CorrectedPort} | SSL],
         #{env => #{dispatch=> dispatch_rules( Endpoints ) } }
       ]},
       restart=>permanent,
@@ -99,14 +100,31 @@ init([]) ->
 dispatch_rules( Endpoints ) ->
   DispatchRules =
     [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ), endpoint => Endpoint } }
-    || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
+    || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints), is_valid_endpoint_name(Endpoint)],
   cowboy_router:compile([{'_', DispatchRules}]).
 
 targets_by_order( Targets )->
   GroupsByOrder =
     maps:groups_from_list(
-      fun({ _Target, Config })->
-        maps:get( order, Config, 0 )
+      fun({ Target, Config })->
+        is_valid_target_name(Target),
+        http_broker_queue:check_settings(maps:get( order, Config, ?DEFAULT_ORDER ), ?MIN_ORDER)
       end , maps:to_list(Targets)
     ),
   lists:sort( maps:to_list( GroupsByOrder ) ).
+
+is_valid_target_name(Target) ->
+  case re:run(Target, "^(https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?)|(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$") of
+    {match, _} -> true;
+    nomatch ->
+      ?LOGINFO("Invalid target name: ~p", [Target]),
+      exit(invalid_url)
+  end.
+
+is_valid_endpoint_name(Endpoint) ->
+  case re:run(Endpoint, "^/[a-zA-Z0-9_]+$") of
+    {match, _} -> true;
+    nomatch ->
+      ?LOGINFO("Invalid endpoint name: ~p", [Endpoint]),
+      exit(invalid_url)
+  end.
