@@ -30,12 +30,10 @@ start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  Cycle = ?ENV(purge_cycle, ?DEFAULT_CYCLE),
-  CorrectedCycle = http_broker_queue:check_settings(Cycle, ?MIN_CYCLE, ?MAX_CYCLE),
-  CycleMilliseconds = CorrectedCycle * 1000,
+  Cycle = http_broker_queue:check_settings(purge_cycle, ?ENV(purge_cycle, ?DEFAULT_CYCLE), ?MIN_CYCLE, ?MAX_CYCLE) * 1000,
 
   self() ! on_cycle,
-  {ok, #state{ cycle = CycleMilliseconds }}.
+  {ok, #state{ cycle = Cycle }}.
 
 handle_call(Request, _From, State) ->
   ?LOGWARNING("unexpected call request to cleanup service: ~p",[ Request ]),

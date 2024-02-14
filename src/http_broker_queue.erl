@@ -19,8 +19,8 @@
 
 % Internal functions
 -export([
-  check_settings/3,
-  check_settings/2
+  check_settings/4,
+  check_settings/3
 ]).
 
 on_init() ->
@@ -38,20 +38,20 @@ on_init() ->
   persistent_term:put(?DB_REF, Ref),
   ok.
 
-check_settings(ValueIn, MinValue, MaxValue) ->
+check_settings(Setting, ValueIn, MinValue, MaxValue) ->
   case ValueIn of
     ValueOut when ValueOut >= MinValue, ValueOut =< MaxValue ->
       ValueOut;
     _InvalidValue ->
-      ?LOGERROR("Invalid settings for: ~p, ~p", [ValueIn, _InvalidValue]),
+      ?LOGERROR("Invalid settings for: ~p, ~p", [Setting, _InvalidValue]),
       exit(invalid_value)
   end.
-check_settings(ValueIn, MinValue) ->
+check_settings(Setting, ValueIn, MinValue) ->
   case ValueIn of
     ValueOut when ValueOut >= MinValue ->
       ValueOut;
     _InvalidValue ->
-      ?LOGERROR("Invalid settings for: ~p, ~p", [ValueIn, _InvalidValue]),
+      ?LOGERROR("Invalid settings for: ~p, ~p", [Setting, _InvalidValue]),
       exit(invalid_value)
   end.
 

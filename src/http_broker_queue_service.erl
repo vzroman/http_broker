@@ -30,13 +30,12 @@ start_link(Endpoint, Target) ->
 
 init([Endpoint, Target]) ->
 
-  Cycle = ?ENV(retry_cycle, ?DEFAULT_CYCLE),
-  CorrectedCycle = http_broker_queue:check_settings(Cycle, ?MIN_CYCLE, ?MAX_CYCLE),
+  Cycle = http_broker_queue:check_settings(retry_cycle, ?ENV(retry_cycle, ?DEFAULT_CYCLE), ?MIN_CYCLE, ?MAX_CYCLE),
   esubscribe:subscribe(?SUBSCRIPTIONS_SCOPE, Endpoint, _PID=self(), _Nodes = [node()]),
 
   self() ! on_cycle,
 
-  {ok, #state{ endpoint = Endpoint, target = Target, cycle = CorrectedCycle }}.
+  {ok, #state{ endpoint = Endpoint, target = Target, cycle = Cycle }}.
 
 handle_call(Request, _From, State) ->
   ?LOGWARNING("unexpected call request to send target service: ~p",[ Request ]),

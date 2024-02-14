@@ -20,8 +20,7 @@ init([]) ->
  http_broker_queue:on_init(),
 
   %------------------Listener-----------------------------
-  Port = ?ENV(port, ?DEFAULT_LISTEN_PORT),
-  CorrectedPort = http_broker_queue:check_settings(Port, ?MIN_LISTEN_PORT, ?MAX_LISTEN_PORT),
+  Port = http_broker_queue:check_settings(port, ?ENV(port, ?DEFAULT_LISTEN_PORT), ?MIN_LISTEN_PORT, ?MAX_LISTEN_PORT),
   SSL = ?ENV(ssl, []),
   ListenerType =
     if
@@ -36,7 +35,7 @@ init([]) ->
       id=>http_listener,
       start=>{ cowboy ,ListenerType ,[
         http_listener,
-        [ {port, CorrectedPort} | SSL],
+        [ {port, Port} | SSL],
         #{env => #{dispatch=> dispatch_rules( Endpoints ) } }
       ]},
       restart=>permanent,
@@ -108,7 +107,7 @@ targets_by_order( Targets )->
     maps:groups_from_list(
       fun({ Target, Config })->
         is_valid_target_name(Target),
-        http_broker_queue:check_settings(maps:get( order, Config, ?DEFAULT_ORDER ), ?MIN_ORDER)
+        http_broker_queue:check_settings(order, maps:get( order, Config, ?DEFAULT_ORDER ), ?MIN_ORDER)
       end , maps:to_list(Targets)
     ),
   lists:sort( maps:to_list( GroupsByOrder ) ).
