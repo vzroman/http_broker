@@ -1,0 +1,19 @@
+{application, http_broker,
+ [{description, "HTTP broker"},
+  {vsn, git},
+  {registered, []},
+  {mod, {http_broker_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    cowboy,
+    inets,
+    esubscribe,
+    zaya_rocksdb
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {licenses, ["MIT"]},
+  {links, []}
+ ]}.
