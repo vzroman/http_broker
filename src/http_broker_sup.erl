@@ -19,6 +19,15 @@ init([]) ->
 
  http_broker_queue:on_init(),
 
+  SubscriptionsServer = #{
+    id=>esubscribe,
+    start=>{esubscribe,start_link,[ ?SUBSCRIPTIONS_SCOPE ]},
+    restart=>permanent,
+    shutdown=> ?DEFAULT_STOP_TIMEOUT,
+    type=>worker,
+    modules=>[esubscribe]
+  },
+
   %------------------Listener-----------------------------
   Port = ?ENV(port, ?DEFAULT_LISTEN_PORT),
   SSL = ?ENV(ssl, []),
@@ -57,6 +66,7 @@ init([]) ->
       }
       || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints ), {Service, _Config} = Target <- maps:to_list( Targets )
     ],
+
   MaxAgeService = #{
     id => http_broker_max_age_service,
     start => {http_broker_max_age_service, start_link, []},
@@ -73,14 +83,6 @@ init([]) ->
     type => worker,
     modules => [http_broker_queue_cleanup_service]
   },
-  SubscriptionsServer = #{
-    id=>esubscribe,
-    start=>{esubscribe,start_link,[ ?SUBSCRIPTIONS_SCOPE ]},
-    restart=>permanent,
-    shutdown=> ?DEFAULT_STOP_TIMEOUT,
-    type=>worker,
-    modules=>[esubscribe]
-  },
 
   SupFlags = #{
     strategy => one_for_one,
@@ -89,10 +91,10 @@ init([]) ->
   },
 
   {ok, {SupFlags, [
+    SubscriptionsServer,
     Listener,
     MaxAgeService,
-    CleanupService,
-    SubscriptionsServer
+    CleanupService
     | QueueServices
   ]}}.
 

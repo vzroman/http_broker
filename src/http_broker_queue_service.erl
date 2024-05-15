@@ -79,7 +79,11 @@ handle_info(Message, State) ->
 %%======================================================================
 %%  Stopping
 %%======================================================================
-terminate(_Reason, _TimerRef) ->
+terminate(Reason, #state{
+  endpoint = Endpoint,
+  target = Target
+}) ->
+  ?LOGWARNING("~p: ~p terminate, reason: ~p",[Endpoint, Target, Reason]),
   ok.
 
 code_change(_OldVsn, TimerRef, _Extra) ->

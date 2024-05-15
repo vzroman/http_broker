@@ -53,14 +53,15 @@ next_queue( Endpoint, Service )->
 
   QueueDB = persistent_term:get(?DB_REF),
   case zaya_rocksdb:next(QueueDB, ?TARGET(Endpoint, Service, '_')) of
-    {?TARGET(Endpoint, Service, Ref), _Attempts} ->
+    {?TARGET(Endpoint, Service, Ref)=Target, _Attempts} ->
       case zaya_rocksdb:read( QueueDB, [?QUEUE(Endpoint, Ref)] ) of
         [{_, Request}] ->
           {Ref, Request};
-        _->
-          undefined
+        _Read->
+          zaya_rocksdb:delete( QueueDB, [Target] ),
+          next_queue( Endpoint, Service )
       end;
-    _->
+  _->
       undefined
   end.
 
@@ -131,6 +132,9 @@ check_targets( DB, ?QUEUE(Endpoint, Ref)=Queue, {?TARGET(Endpoint, Service, Ref)
     end,
 
   check_targets( DB, Queue, zaya_rocksdb:next( DB, Target ), Targets, Count1 );
+
+check_targets( DB, ?QUEUE(Endpoint, _Ref)=Queue, {?TARGET(Endpoint, _Service, _AnotherQueueRef) = Target, _Attempts}, Targets, Count )->
+  check_targets( DB, Queue, zaya_rocksdb:next( DB, Target ), Targets, Count );
 
 check_targets( _DB, _Queue, _Other, _Targets, Count )->
   Count.
