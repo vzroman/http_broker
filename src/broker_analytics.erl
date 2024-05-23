@@ -69,7 +69,7 @@ print_all_keys(_, _, _) ->
 
 count_targets(QueueDB) ->
 	Query = #{},
-	UserFun = fun({Key, _Value}) ->
+	IsTargetCheckFun = fun({Key, _Value}) ->
 		io:format("Processing Key: ~p~n", [Key]),
 		case Key of
 			%{?TARGET(Endpoint, Service, _Ref)} ->
@@ -80,16 +80,13 @@ count_targets(QueueDB) ->
 		end
 	end,
 	GroupedMap = zaya_rocksdb:foldl(QueueDB, Query, fun({Key, Value}, Acc) ->
-		io:format("Key: ~p, Value: ~p~n", [Key, Value]),
-		case UserFun({Key, Value}) of
+		case IsTargetCheckFun({Key, Value}) of
 			{true, GroupKey} ->
-				io:format("Grouping Key: ~p as ~p~n", [Key, GroupKey]),
 				maps:update_with(GroupKey, fun(List) -> [Value | List] end, [Value], Acc);
 			false ->
 				Acc
 		end
 	end, #{}),
-	io:format("Final GroupedMap: ~p~n", [GroupedMap]),
 	maps:map(fun(_Key, Val) -> length(Val) end, GroupedMap).
 
 count_queue_items(QueueDB) ->
