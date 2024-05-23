@@ -70,9 +70,7 @@ print_all_keys(_, _, _) ->
 count_targets(QueueDB) ->
 	Query = #{},
 	IsTargetCheckFun = fun({Key, _Value}) ->
-		io:format("Processing Key: ~p~n", [Key]),
 		case Key of
-			%{?TARGET(Endpoint, Service, _Ref)} ->
 			{target, Endpoint, Service, _Ref} ->
 				{true, {Endpoint, Service}};
 			_ ->
@@ -115,7 +113,23 @@ log_data(QueueCount, ItemCount, AttemptsCount) ->
   .
 
 write_to_file(QueueCount, ItemCount, AttemptsCount) ->
-  {ok, File} = file:open("queue_stats.txt", [write]),
-  io:format(File, "Queue Count: ~p~nItem Count: ~p~nAttempts Count: ~p~n", [QueueCount, ItemCount, AttemptsCount]),
-  file:close(File)
+	{ok, File} = file:open("queue_stats.json", [write]),
+	ConvertedQueueCount = maps:fold(
+		fun({Endpoint, Service}, Val, Acc) ->
+			KeyStr = io_lib:format("~s-~s",[binary_to_list(Endpoint), binary_to_list(Service)]),
+			maps:put(lists:flatten(KeyStr), Val, Acc)
+		end,
+		#{},
+		QueueCount
+	),
+	JsonReadyQueueCount = maps:from_list(lists:map(fun({K,V}) -> {list_to_binary(K),V} end, maps:to_list(ConvertedQueueCount))),
+	Data = #{
+		<<"queue_count">> => JsonReadyQueueCount, 
+		<<"item_count">> => ItemCount, 
+		<<"attempts_count">> => AttemptsCount
+	},
+	io:format("Count: ~p Data: ~p ~n", [ConvertedQueueCount, Data]),
+	Json = jsx:encode(Data),
+	io:format(File, "~s", [Json]),
+ 	file:close(File)
   .
