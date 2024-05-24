@@ -102,7 +102,10 @@ dispatch_rules( Endpoints ) ->
   DispatchRules =
     [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ), endpoint => Endpoint } }
     || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
-  cowboy_router:compile([{'_', DispatchRules}]).
+  AdditionalRoutes = [
+    {"/queue_stats", http_broker_acceptor, #{}}
+  ],
+  cowboy_router:compile([{'_', DispatchRules ++ AdditionalRoutes}]).
 
 targets_by_order( Targets )->
   GroupsByOrder =

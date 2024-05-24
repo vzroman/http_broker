@@ -2,13 +2,14 @@
 
 -include("http_broker.hrl").
 
--export([start/0, collect_data/0]).
+-export([start/0, collect_data/0, convert_to_json/3]).
 
 
 -define(DECODE_KEY(K), sext:decode(K) ).
 -define(DECODE_VALUE(V), binary_to_term(V) ).
 
 
+JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount),
 start() ->
 	schedule(),
 	collect_data()
@@ -114,6 +115,12 @@ log_data(QueueCount, ItemCount, AttemptsCount) ->
 
 write_to_file(QueueCount, ItemCount, AttemptsCount) ->
 	{ok, File} = file:open("queue_stats.json", [write]),
+	Json = convert_to_json(QueueCount, ItemCount, AttemptsCount),
+	io:format(File, "~s", [Json]),
+ 	file:close(File)
+  .
+
+convert_to_json(QueueCount, ItemCount, AttemptsCount) ->
 	ConvertedQueueCount = maps:fold(
 		fun({Endpoint, Service}, Val, Acc) ->
 			KeyStr = io_lib:format("~s-~s",[binary_to_list(Endpoint), binary_to_list(Service)]),
@@ -129,7 +136,5 @@ write_to_file(QueueCount, ItemCount, AttemptsCount) ->
 		<<"attempts_count">> => AttemptsCount
 	},
 	io:format("Count: ~p Data: ~p ~n", [ConvertedQueueCount, Data]),
-	Json = jsx:encode(Data),
-	io:format(File, "~s", [Json]),
- 	file:close(File)
-  .
+	jsx:encode(Data)
+	.
