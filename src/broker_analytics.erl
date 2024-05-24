@@ -9,7 +9,6 @@
 -define(DECODE_VALUE(V), binary_to_term(V) ).
 
 
-JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount),
 start() ->
 	schedule(),
 	collect_data()
