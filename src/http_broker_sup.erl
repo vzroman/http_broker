@@ -54,17 +54,24 @@ init([]) ->
     },
 
   %-----------------Queue services----------------------------
+  StrategyAllEndpoints = [{
+    Endpoint,
+    maps:get( attempts, Params, infinity ),
+    maps:to_list( Targets )
+  } || { Endpoint, #{ strategy := all, targets := Targets } = Params } <- maps:to_list( Endpoints ) ],
+
   QueueServices =
     [
       #{
         id => list_to_atom( Endpoint ++"->" ++ Service ),
-        start => {http_broker_queue_service, start_link, [ Endpoint, Target ]},
+        start => {http_broker_queue_service, start_link, [ Endpoint, Target, Attempts ]},
         restart => permanent,
         shutdown => ?DEFAULT_STOP_TIMEOUT,
         type => worker,
         modules => [http_broker_queue_service]
-      }
-      || {Endpoint, #{targets:=Targets}} <- maps:to_list( Endpoints ), {Service, _Config} = Target <- maps:to_list( Targets )
+      } ||
+        { Endpoint, Attempts, Targets } <- StrategyAllEndpoints,
+        { Service, _Config } = Target <-  Targets
     ],
 
   MaxAgeService = #{
