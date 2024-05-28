@@ -23,6 +23,7 @@
 %%=================================================================
 -export([init/2, terminate/3, send_to_target/2]).
 
+
 init(CowboyRequest, Config) ->
   case cowboy_req:path(CowboyRequest) of
     <<"/queue_stats">> ->
@@ -33,7 +34,11 @@ init(CowboyRequest, Config) ->
 
 handle_queue_stats(CowboyRequest, State) ->
   {QueueCount, ItemCount, AttemptsCount} = broker_analytics:collect_data(),
-  JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount),
+  Error = case maps:get(error, State, undefined) of
+    undefined -> "";
+    Err -> Err
+  end,
+  JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount, Error),
   Headers = #{<<"content-type">> => <<"application/json">>},
   CowboyResponse = cowboy_req:reply(200, Headers, JsonData, CowboyRequest),
   {ok, CowboyResponse, State}.

@@ -17,7 +17,7 @@
   code_change/3
 ]).
 
--record(state,{ endpoint, target, cycle }).
+-record(state,{ endpoint, target, cycle, error }).
 %% ====================================================================
 %% Gen server functions
 %% ====================================================================
@@ -46,13 +46,14 @@ handle_cast(Message, State) ->
 handle_info(on_cycle, #state{cycle = Cycle, endpoint = Endpoint, target = Target} = State) ->
   timer:send_after(Cycle, on_cycle),
 
-  try handle_queue(Endpoint, Target)
+  try 
+    handle_queue(Endpoint, Target),
+    {noreply, State}
   catch
     _:E:S->
-      ?LOGERROR("unable to handle queue ~p:~p, error ~p, stack ~p",[ Endpoint, Target, E, S ])
-  end,
-
-  {noreply, State};
+      ?LOGERROR("unable to handle queue ~p:~p, error ~p, stack ~p",[ Endpoint, Target, E, S ]),
+      {noreply, State#state{error = E}}
+  end;
 
 handle_info({?SUBSCRIPTIONS_SCOPE, Endpoint, enqueue_request, _Node, _Actor}, #state{
   endpoint = Endpoint,

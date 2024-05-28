@@ -2,7 +2,7 @@
 
 -include("http_broker.hrl").
 
--export([start/0, collect_data/0, convert_to_json/3]).
+-export([start/0, collect_data/0, convert_to_json/4]).
 
 
 -define(DECODE_KEY(K), sext:decode(K) ).
@@ -25,7 +25,7 @@ collect_data() ->
   % get attempts count for latest item in queue
 	{QueueCount, ItemCount, AttemptsCount} = get_queue_stats(QueueDB),
 	% log the collected data
-	log_data(QueueCount, ItemCount, AttemptsCount),
+	log_data(QueueCount, ItemCount, AttemptsCount, ""),
 	{QueueCount, ItemCount, AttemptsCount}
   .
 
@@ -106,20 +106,20 @@ get_attempts_count(QueueDB) ->
             0
     end.
 
-log_data(QueueCount, ItemCount, AttemptsCount) ->
+log_data(QueueCount, ItemCount, AttemptsCount, Error) ->
   % log to file with write_file
-  write_to_file(QueueCount, ItemCount, AttemptsCount),
-  io:format("Queue Count: ~p~nItem Count: ~p~nAttempts Count: ~p~n", [QueueCount, ItemCount, AttemptsCount])
+  write_to_file(QueueCount, ItemCount, AttemptsCount, Error),
+  io:format("Queue Count: ~p~nItem Count: ~p~nAttempts Count: ~p~nError: ~p~n", [QueueCount, ItemCount, AttemptsCount, Error])
   .
 
-write_to_file(QueueCount, ItemCount, AttemptsCount) ->
+write_to_file(QueueCount, ItemCount, AttemptsCount, Error) ->
 	{ok, File} = file:open("queue_stats.json", [write]),
-	Json = convert_to_json(QueueCount, ItemCount, AttemptsCount),
+	Json = convert_to_json(QueueCount, ItemCount, AttemptsCount, Error),
 	io:format(File, "~s", [Json]),
  	file:close(File)
   .
 
-convert_to_json(QueueCount, ItemCount, AttemptsCount) ->
+convert_to_json(QueueCount, ItemCount, AttemptsCount, Error) ->
 	ConvertedQueueCount = maps:fold(
 		fun({Endpoint, Service}, Val, Acc) ->
 			KeyStr = io_lib:format("~s-~s",[binary_to_list(Endpoint), binary_to_list(Service)]),
@@ -132,7 +132,8 @@ convert_to_json(QueueCount, ItemCount, AttemptsCount) ->
 	Data = #{
 		<<"queue_count">> => JsonReadyQueueCount, 
 		<<"item_count">> => ItemCount, 
-		<<"attempts_count">> => AttemptsCount
+		<<"attempts_count">> => AttemptsCount,
+		<<"last_error">> => Error
 	},
 	io:format("Count: ~p Data: ~p ~n", [ConvertedQueueCount, Data]),
 	jsx:encode(Data)
