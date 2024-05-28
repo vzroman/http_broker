@@ -18,6 +18,8 @@
     lists:nth(_@I+1, List)
   end).
 
+-define(DEFAULT_HTTP_TIMEOUT, 30000).
+
 %%=================================================================
 %%	Cowboy behaviour
 %%=================================================================
@@ -122,10 +124,17 @@ send_to_target({URL, Params}, #request{
     end,
 
   Request = {URL, AdaptedHeaders, ContentType, Body},
+
+  Timeout = maps:get(timeout, Params, ?DEFAULT_HTTP_TIMEOUT),
+  HTTPOptions0 = [
+    {timeout, Timeout},
+    {connect_timeout, Timeout div 10}
+  ],
+
   HTTPOptions =
     case Params of
-      #{ ssl := SSL } -> [{ssl,SSL}];
-      _-> []
+      #{ ssl := SSL } -> [{ssl,SSL}|HTTPOptions0];
+      _-> HTTPOptions0
     end,
 
   try
