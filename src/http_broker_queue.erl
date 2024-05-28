@@ -75,7 +75,7 @@ invalid_attempt( Endpoint, Service, Ref, MaxAttempts )->
     [{_, Attempts0}] ->
       Attempts = Attempts0 + 1,
       if
-        Attempts >= MaxAttempts ->
+        is_number(MaxAttempts), Attempts >= MaxAttempts ->
           ?LOGWARNING("~p service ~p max attempts ~p reached, drop queue",[
             Endpoint,
             Service,
