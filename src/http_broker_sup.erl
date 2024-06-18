@@ -54,11 +54,11 @@ init([]) ->
     },
 
   %-----------------Queue services----------------------------
-  StrategyAllEndpoints = [{
+  StrategyCallAllEndpoints = [{
     Endpoint,
     maps:get( attempts, Params, infinity ),
     maps:to_list( Targets )
-  } || { Endpoint, #{ strategy := all, targets := Targets } = Params } <- maps:to_list( Endpoints ) ],
+  } || { Endpoint, #{ strategy := call_all, targets := Targets } = Params } <- maps:to_list( Endpoints ) ],
 
   QueueServices =
     [
@@ -70,7 +70,7 @@ init([]) ->
         type => worker,
         modules => [http_broker_queue_service]
       } ||
-        { Endpoint, Attempts, Targets } <- StrategyAllEndpoints,
+        { Endpoint, Attempts, Targets } <- StrategyCallAllEndpoints,
         { Service, _Config } = Target <-  Targets
     ],
 
