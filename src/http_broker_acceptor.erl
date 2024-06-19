@@ -108,7 +108,7 @@ try_send( Request, #{
   targets := Targets
 }) ->
 
-  AllTargets = rest_targets(erlang:make_ref(), Targets ),
+  AllTargets = all_targets( Targets ),
 
   [case send_to_target(T, Request) of
      {ok, _Response} -> ok;
@@ -209,3 +209,6 @@ rest_targets(Target, Targets) ->
 
 parse_method( Method ) ->
   list_to_atom( string:to_lower( binary_to_list( Method ) ) ).
+
+all_targets(Targets) ->
+  lists:append( [TargetsList || {_Key, TargetsList} <- Targets]).
