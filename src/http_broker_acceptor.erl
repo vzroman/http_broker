@@ -18,6 +18,8 @@
     lists:nth(_@I+1, List)
   end).
 
+-define(DEFAULT_HTTP_TIMEOUT, 30000).
+
 %%=================================================================
 %%	Cowboy behaviour
 %%=================================================================
@@ -27,11 +29,7 @@
   send_to_target/2
 ]).
 
-init(CowboyRequest, #{
-  strategy := Strategy,
-  targets := Targets,
-  endpoint := Endpoint
-} = Config) ->
+init(CowboyRequest, Config) ->
 
   { Body, CowboyRequest1} = read_body( CowboyRequest ),
 
@@ -41,15 +39,48 @@ init(CowboyRequest, #{
     body = Body
   },
 
-  {Target, Response} = try_send( Targets, Request),
+  Response = try_send( Request, Config),
   #response{
     code = ResponseCode,
     headers = ResponseHeaders,
     body = ResponseBody
   } = Response,
 
+  AdaptedHeaders =
+    maps:from_list( [ {
+      unicode:characters_to_binary( Header ),
+      unicode:characters_to_binary( Value )
+    } || {Header, Value} <- ResponseHeaders ] ),
+  CowboyResponse = cowboy_req:reply(ResponseCode, AdaptedHeaders, ResponseBody, CowboyRequest1),
+
+  {ok, CowboyResponse, Config}.
+
+
+terminate(_Reason, _Req, _State) ->
+  ok.
+
+
+try_send( Request, #{
+  strategy := call_one,
+  targets := Targets
+}) ->
+
+  {_Target, Response} = call_one( Request, Targets ),
+
+  Response;
+
+try_send( Request, #{
+  strategy := call_all,
+  targets := Targets,
+  endpoint := Endpoint
+}) ->
+
+  {Target, Response} = call_one( Request, Targets ),
+
+  #response{ code =  ResponseCode} = Response,
+
   if
-    Strategy =:= all andalso  (ResponseCode >= 200 orelse ResponseCode =< 299)  ->
+    (ResponseCode >= 200 orelse ResponseCode =< 299)  ->
       % If the process crashes here then the client will receive
       %   500 Server Internal Error
       % and the request should be handled as not successful
@@ -58,21 +89,44 @@ init(CowboyRequest, #{
       ignore
   end,
 
-  AdaptedHeaders =
-    maps:from_list( [ {
-      unicode:characters_to_binary( Header ),
-      unicode:characters_to_binary( Value )
-    } || {Header, Value} <- ResponseHeaders ] ),
-  CowboyResponse = cowboy_req:reply(ResponseCode, AdaptedHeaders, ResponseBody, CowboyRequest1),
-  {ok, CowboyResponse, Config}.
+  Response;
+
+try_send( Request, #{
+  strategy := cast_one
+} = Config) ->
+
+  spawn(fun()-> try_send( Request, Config#{ strategy => call_one }) end),
+
+  #response{
+    code = 200,
+    headers = [],
+    body = <<>>
+  };
+
+try_send( Request, #{
+  strategy := cast_all,
+  targets := Targets
+}) ->
+
+  AllTargets = all_targets( Targets ),
+
+  [case send_to_target(T, Request) of
+     {ok, _Response} -> ok;
+     {error, Error, _Response} ->
+       ?LOGWARNING("unable send request to target ~p, error ~p",[ T, Error ])
+   end || T <- AllTargets],
+
+  #response{
+    code = 200,
+    headers = [],
+    body = <<>>
+  }.
 
 
-terminate(_Reason, _Req, _State) ->
-  ok.
+call_one(Request, Targets)->
 
+  {Target, RestTargets} = pick_target( Targets ),
 
-try_send(Targets, Request) ->
-  {Target, RestTargets} = pick_target(Targets),
   case send_to_target(Target, Request) of
     {ok, Response} ->
       {Target, Response};
@@ -82,7 +136,7 @@ try_send(Targets, Request) ->
         length(RestTargets) =:= 0 ->
           {Target, Response};
         true ->
-          try_send(RestTargets, Request)
+          call_one(Request, RestTargets )
       end
   end.
 
@@ -122,10 +176,17 @@ send_to_target({URL, Params}, #request{
     end,
 
   Request = {URL, AdaptedHeaders, ContentType, Body},
+
+  Timeout = maps:get(timeout, Params, ?DEFAULT_HTTP_TIMEOUT),
+  HTTPOptions0 = [
+    {timeout, Timeout},
+    {connect_timeout, Timeout div 10}
+  ],
+
   HTTPOptions =
     case Params of
-      #{ ssl := SSL } -> [{ssl,SSL}];
-      _-> []
+      #{ ssl := SSL } -> [{ssl,SSL}|HTTPOptions0];
+      _-> HTTPOptions0
     end,
 
   try
@@ -148,3 +209,6 @@ rest_targets(Target, Targets) ->
 
 parse_method( Method ) ->
   list_to_atom( string:to_lower( binary_to_list( Method ) ) ).
+
+all_targets(Targets) ->
+  lists:append( [TargetsList || {_Key, TargetsList} <- Targets]).

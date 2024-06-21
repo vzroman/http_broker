@@ -11,7 +11,7 @@
   next_queue/2,
   remove_queue/3,
 
-  invalid_attempt/3,
+  invalid_attempt/4,
 
   purge/0,
   purge_until/1
@@ -69,11 +69,22 @@ remove_queue( Endpoint, Service, Ref )->
   QueueDB = persistent_term:get(?DB_REF),
   zaya_rocksdb:delete( QueueDB, [?TARGET(Endpoint, Service, Ref)] ).
 
-invalid_attempt( Endpoint, Service, Ref )->
+invalid_attempt( Endpoint, Service, Ref, MaxAttempts )->
   QueueDB = persistent_term:get(?DB_REF),
   case zaya_rocksdb:read( QueueDB, [?TARGET(Endpoint, Service, Ref)] ) of
-    [{_, Attempts}] ->
-      zaya_rocksdb:write(QueueDB, [ {?TARGET(Endpoint, Service, Ref), Attempts + 1} ]);
+    [{_, Attempts0}] ->
+      Attempts = Attempts0 + 1,
+      if
+        is_number(MaxAttempts), Attempts >= MaxAttempts ->
+          ?LOGWARNING("~p service ~p max attempts ~p reached, drop queue",[
+            Endpoint,
+            Service,
+            MaxAttempts
+          ]),
+          zaya_rocksdb:delete( QueueDB, [?TARGET(Endpoint, Service, Ref)] );
+        true ->
+          zaya_rocksdb:write(QueueDB, [ {?TARGET(Endpoint, Service, Ref), Attempts} ])
+      end;
     _->
       ok
   end.
