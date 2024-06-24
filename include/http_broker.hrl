@@ -18,6 +18,13 @@
 -define(LOGDEBUG(Text,Params), logger:debug(Text,Params)).
 
 -define(DEFAULT_LISTEN_PORT, 7000).
+-define(DEFAULT_HTTP_CLIENT_OPTIONS,[
+  {pipeline_timeout, 0},
+  {max_pipeline_length, 512},
+  {max_keep_alive_length, 0},
+  {keep_alive_timeout, 1},
+  {max_sessions, 512}
+]).
 
 %----------------Default supervisor settings------------------------------
 -define(DEFAULT_MAX_RESTARTS,10).

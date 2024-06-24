@@ -17,6 +17,8 @@ start_link() ->
 
 init([]) ->
 
+ httpc:set_options( ?ENV( http_client, ?DEFAULT_HTTP_CLIENT_OPTIONS ) ),
+
  http_broker_queue:on_init(),
 
   SubscriptionsServer = #{
