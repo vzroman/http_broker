@@ -109,12 +109,15 @@ try_send( Request, #{
 }) ->
 
   AllTargets = all_targets( Targets ),
-
-  [case send_to_target(T, Request) of
-     {ok, _Response} -> ok;
-     {error, Error, _Response} ->
-       ?LOGWARNING("unable send request to target ~p, error ~p",[ T, Error ])
-   end || T <- AllTargets],
+  Send =
+    fun( Target )->
+      case send_to_target(Target, Request) of
+        {ok, _Response} -> ok;
+        {error, Error, _Response} ->
+          ?LOGWARNING("unable send request to target ~p, error ~p",[ Target, Error ])
+      end
+    end,
+  [ Send( T ) || T <- AllTargets],
 
   #response{
     code = 200,
