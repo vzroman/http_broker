@@ -138,7 +138,7 @@ check_targets( DB, ?QUEUE(Endpoint, Ref)=Queue, {?TARGET(Endpoint, Service, Ref)
         Count + 1;
       _->
         % The target is not in the config any more
-        zaya:delete(DB, [Target]),
+        zaya_rocksdb:delete(DB, [Target]),
         Count
     end,
 
