@@ -23,29 +23,10 @@
 %%=================================================================
 %%        Cowboy behaviour
 %%=================================================================
--export([init/2, terminate/3, send_to_target/2]).
+-export([init/2, terminate/3]).
 
 
 init(CowboyRequest, Config) ->
-  case cowboy_req:path(CowboyRequest) of
-    <<"/queue_stats">> ->
-      handle_queue_stats(CowboyRequest, Config);
-    _ ->
-      handle_request(CowboyRequest, Config)
-  end.
-
-handle_queue_stats(CowboyRequest, State) ->
-  {QueueCount, ItemCount, AttemptsCount} = broker_analytics:collect_data(),
-  Error = case maps:get(error, State, undefined) of
-    undefined -> "";
-    Err -> Err
-  end,
-  JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount, Error),
-  Headers = #{<<"content-type">> => <<"application/json">>},
-  CowboyResponse = cowboy_req:reply(200, Headers, JsonData, CowboyRequest),
-  {ok, CowboyResponse, State}.
-
-handle_request(CowboyRequest, Config) ->
   {Body, CowboyRequest1} = read_body(CowboyRequest),
 
   Request =
@@ -88,7 +69,7 @@ try_send( Request, #{
   endpoint := Endpoint
 }) ->
 
-  {Target, Response} = call_one( Request, Targets ),
+  {Target, Response} = call_one( Request, Targets, Endpoint ),
 
   #response{ code =  ResponseCode} = Response,
 
@@ -139,11 +120,11 @@ try_send( Request, #{
   }.
 
 
-call_one(Request, Targets)->
+call_one(Request, Targets, Endpoint)->
 
   {Target, RestTargets} = pick_target( Targets ),
 
-  case send_to_target(Target, Request) of
+  case send_to_target(Target, Request, Endpoint) of
     {ok, Response} ->
       {Target, Response};
     {error, Error, Response} ->
@@ -152,7 +133,7 @@ call_one(Request, Targets)->
         length(RestTargets) =:= 0 ->
           {Target, Response};
         true ->
-          call_one(Request, RestTargets )
+          call_one(Request, RestTargets, Endpoint )
       end
   end.
 
@@ -178,10 +159,11 @@ read_body(Req, Body) ->
       read_body(Req1, <<Body/binary, Data/binary>>)
   end.
 
-send_to_target({URL, Params},
+send_to_target({URL, Params} = Target,
                #request{headers = Headers,
                         body = Body,
-                        method = Method}) ->
+                        method = Method},
+                Endpoint) ->
   AdaptedHeaders = [{binary_to_list(K), V} || {K, V} <- maps:to_list(Headers)],
 
   ContentType =
@@ -206,7 +188,9 @@ send_to_target({URL, Params},
       _-> HTTPOptions0
     end,
 
-  try
+  StartTime = erlang:system_time(millisecond),
+
+  Result = try
     case httpc:request(Method, Request, HTTPOptions, [{body_format, binary}]) of
       {ok, {{_, Code, _}, ResponseHttpHeaders, ResponseBody}} when Code >= 200, Code =< 299 ->
         {ok,
@@ -220,6 +204,7 @@ send_to_target({URL, Params},
                    headers = ResponseHttpHeaders,
                    body = ResponseBody}};
       {error, Error} ->
+        store_request_error(Endpoint, Target, Error),
         {error,
          Error,
          #response{code = 503,
@@ -228,12 +213,36 @@ send_to_target({URL, Params},
     end
   catch
     _:HTTPError ->
+      store_request_error(Endpoint, Target, HTTPError),
       {error,
        HTTPError,
        #response{code = 500,
                  headers = [],
                  body = []}}
-  end.
+  end,
+  EndTime = erlang:system_time(millisecond),
+  ExecutionTime = EndTime - StartTime,
+  store_request_time(Endpoint, Target, ExecutionTime),
+  Result.
+
+-spec store_request_time(Endpoint :: term(), Target :: term(), ExecutionTime :: integer()) -> ok.
+store_request_time(Endpoint, Target, ExecutionTime) ->
+    Key = {request_times, Endpoint, Target},
+    Times = case persistent_term:get(Key, undefined) of
+        undefined -> [];
+        StoredTimes -> StoredTimes
+    end,
+    NewTimes = [ExecutionTime | Times],
+    UpdatedTimes = lists:sublist(NewTimes, 10),
+    persistent_term:put(Key, UpdatedTimes),
+    ok.
+
+
+-spec store_request_error(Endpoint :: term(), Target :: term(), Error :: term()) -> ok.
+store_request_error(Endpoint, Target, Error) ->
+  analytics:update_last_error(Endpoint, Target, lager_util:localtime_ms(), Error),
+  ok
+  .
 
 rest_targets(Target, Targets) ->
   [{Key, lists:delete(Target, Sublist)} || {Key, Sublist} <- Targets].

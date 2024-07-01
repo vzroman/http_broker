@@ -16,10 +16,13 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
+  % Create an ETS table for storing request statistics
+  analytics:init(),
 
  httpc:set_options( ?ENV( http_client, ?DEFAULT_HTTP_CLIENT_OPTIONS ) ),
 
  http_broker_queue:on_init(),
+ analytics_acceptor:start(),
 
   SubscriptionsServer = #{
     id=>esubscribe,
@@ -111,10 +114,7 @@ dispatch_rules( Endpoints ) ->
   DispatchRules =
     [{Endpoint, http_broker_acceptor, Config#{ targets => targets_by_order( Targets ), endpoint => Endpoint } }
     || {Endpoint, #{ targets := Targets } = Config} <- maps:to_list(Endpoints)],
-  AdditionalRoutes = [
-    {"/queue_stats", http_broker_acceptor, #{}}
-  ],
-  cowboy_router:compile([{'_', DispatchRules ++ AdditionalRoutes}]).
+  cowboy_router:compile([{'_', DispatchRules}]).
 
 targets_by_order( Targets )->
   GroupsByOrder =
