@@ -18,6 +18,7 @@ start_link() ->
 init([]) ->
   % Create an ETS table for storing request statistics
   analytics:init(),
+  create_request_times_table(),
 
  httpc:set_options( ?ENV( http_client, ?DEFAULT_HTTP_CLIENT_OPTIONS ) ),
 
@@ -109,6 +110,9 @@ init([]) ->
     CleanupService
     | QueueServices
   ]}}.
+
+create_request_times_table() ->
+  ets:new(request_times_table, [named_table, public, {read_concurrency, true}, {write_concurrency, true}]).
 
 dispatch_rules( Endpoints ) ->
   DispatchRules =

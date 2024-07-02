@@ -1,104 +1,78 @@
--module(broker_analytics_tests).
+-module(analytics_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("http_broker.hrl").
 -include("analytics.hrl").
 
-% Mock the zaya_rocksdb module
--define(MOCK_DB, mock_db).
-
+%% Setup and teardown
 setup() ->
-    meck:new(zaya_rocksdb, [non_strict]),
-    meck:new(persistent_term, [non_strict]),
-    meck:new(analytics, [non_strict]),
-    meck:expect(persistent_term, get, fun(?DB_REF) -> ?MOCK_DB end),
-    meck:expect(analytics, update_endpoint, fun(_, _) -> ok end).
+    analytics:init().
 
-cleanup(_) ->
-    meck:unload(zaya_rocksdb),
-    meck:unload(persistent_term),
-    meck:unload(analytics).
+teardown(_) ->
+    ets:delete(request_stats).
 
-broker_analytics_test_() ->
+analytics_test_() ->
     {setup,
      fun setup/0,
-     fun cleanup/1,
+     fun teardown/1,
      [
-      {"test get_endpoints", fun test_get_endpoints/0},
-      {"test find_all_error_queue_count", fun test_find_all_error_queue_count/0},
-      {"test get_queue_count_for", fun test_get_queue_count_for/0},
-      {"test count_targets", fun test_count_targets/0},
-      {"test count_queue_items", fun test_count_queue_items/0}
+      ?_test(test_find_endpoint()),
+      ?_test(test_find_endpoint_target()),
+      ?_test(test_update_endpoint()),
+      ?_test(test_update_endpoint_target()),
+      ?_test(test_update_last_error())
      ]}.
 
-test_get_endpoints() ->
-    MockData = [
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref1">>}, <<"value1">>},
-        {{target, <<"endpoint2">>, <<"service2">>, <<"ref2">>}, <<"value2">>},
-        {{target, <<"endpoint1">>, <<"service3">>, <<"ref3">>}, <<"value3">>}
-    ],
-    meck:expect(zaya_rocksdb, foldl, 
-        fun(?MOCK_DB, _, Fun, InitAcc) ->
-            lists:foldl(fun({Key, Value}, Acc) -> Fun({Key, Value}, Acc) end, InitAcc, MockData)
-        end),
+test_find_endpoint() ->
+    Endpoint = <<"test_endpoint">>,
+    EndpointInfo = #endpoint_info{total_queue_count = 1, targets = #{}},
+    ets:insert(request_stats, {request_data, #system_info{endpoints = #{Endpoint => EndpointInfo}}}),
     
-    Result = broker_analytics:get_endpoints(?MOCK_DB),
-    ?assertEqual([<<"endpoint1">>, <<"endpoint2">>], Result).
+    Result = analytics:find_endpoint(Endpoint),
+    ?assertEqual([EndpointInfo], Result).
 
-test_find_all_error_queue_count() ->
-    MockData = [
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref1">>}, <<"value1">>},
-        {{target, <<"endpoint2">>, <<"service2">>, <<"ref2">>}, <<"value2">>},
-        {{target, <<"endpoint1">>, <<"service3">>, <<"ref3">>}, <<"value3">>}
-    ],
-    meck:expect(zaya_rocksdb, foldl, 
-        fun(?MOCK_DB, _, Fun, InitAcc) ->
-            lists:foldl(fun({Key, Value}, Acc) -> Fun({Key, Value}, Acc) end, InitAcc, MockData)
-        end),
-    meck:expect(zaya_rocksdb, read, fun(?MOCK_DB, [_Key]) -> [{key, term_to_binary({value, 2})}] end),
+test_find_endpoint_target() ->
+    Endpoint = <<"test_endpoint">>,
+    Target = <<"test_target">>,
+    TargetInfo = #target_info{queue_count = 1},
+    EndpointInfo = #endpoint_info{total_queue_count = 1, targets = #{Target => TargetInfo}},
+    ets:insert(request_stats, {request_data, #system_info{endpoints = #{Endpoint => EndpointInfo}}}),
     
-    Result = broker_analytics:find_all_error_queue_count(?MOCK_DB),
-    ?assertEqual(3, Result).
+    Result = analytics:find_endpoint_target(Endpoint, Target),
+    ?assertEqual([{Endpoint, TargetInfo}], Result).
 
-test_get_queue_count_for() ->
-    MockData = [
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref1">>}, <<"value1">>},
-        {{target, <<"endpoint2">>, <<"service2">>, <<"ref2">>}, <<"value2">>},
-        {{target, <<"endpoint1">>, <<"service3">>, <<"ref3">>}, <<"value3">>}
-    ],
-    meck:expect(zaya_rocksdb, foldl, 
-        fun(?MOCK_DB, _, Fun, InitAcc) ->
-            lists:foldl(fun({Key, Value}, Acc) -> Fun({Key, Value}, Acc) end, InitAcc, MockData)
-        end),
+test_update_endpoint() ->
+    Endpoint = <<"test_endpoint">>,
+    EndpointInfo = #endpoint_info{total_queue_count = 1, targets = #{}},
+    analytics:update_endpoint(Endpoint, EndpointInfo),
     
-    Result = broker_analytics:get_queue_count_for(<<"endpoint1">>, ?MOCK_DB),
-    ?assertEqual(2, Result).
+    [{request_data, Data}] = ets:lookup(request_stats, request_data),
+    ?assertEqual(EndpointInfo, maps:get(Endpoint, Data#system_info.endpoints)).
 
-test_count_targets() ->
-    MockData = [
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref1">>}, <<"value1">>},
-        {{target, <<"endpoint2">>, <<"service2">>, <<"ref2">>}, <<"value2">>},
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref3">>}, <<"value3">>}
-    ],
-    meck:expect(zaya_rocksdb, foldl, 
-        fun(?MOCK_DB, _, Fun, InitAcc) ->
-            lists:foldl(fun({Key, Value}, Acc) -> Fun({Key, Value}, Acc) end, InitAcc, MockData)
-        end),
+test_update_endpoint_target() ->
+    Endpoint = <<"test_endpoint">>,
+    Target = <<"test_target">>,
+    TargetInfo = #target_info{queue_count = 1},
+    analytics:update_endpoint_target(Endpoint, Target, TargetInfo),
     
-    Result = broker_analytics:count_targets(?MOCK_DB),
-    ExpectedResult = #{{<<"endpoint1">>, <<"service1">>} => 1,
-                       {<<"endpoint2">>, <<"service2">>} => 1},
-    ?assertEqual(ExpectedResult, Result).
+    [{request_data, Data}] = ets:lookup(request_stats, request_data),
+    EndpointInfo = maps:get(Endpoint, Data#system_info.endpoints),
+    ?assertEqual(TargetInfo, maps:get(Target, EndpointInfo#endpoint_info.targets)).
 
-test_count_queue_items() ->
-    MockData = [
-        {{target, <<"endpoint1">>, <<"service1">>, <<"ref1">>}, <<"value1">>},
-        {{target, <<"endpoint2">>, <<"service2">>, <<"ref2">>}, <<"value2">>},
-        {{target, <<"endpoint1">>, <<"service3">>, <<"ref3">>}, <<"value3">>}
-    ],
-    meck:expect(zaya_rocksdb, foldl, 
-        fun(?MOCK_DB, _, Fun, InitAcc) ->
-            lists:foldl(fun({Key, Value}, Acc) -> Fun({Key, Value}, Acc) end, InitAcc, MockData)
-        end),
+test_update_last_error() ->
+    Endpoint = <<"test_endpoint">>,
+    Target = <<"test_target">>,
+    ErrorTime = erlang:system_time(second),
+    ErrorText = <<"Test error">>,
     
-    Result = broker_analytics:count_queue_items(?MOCK_DB),
-    ?assertEqual(3, Result).
+    % First, insert some initial data
+    InitialTargetInfo = #target_info{queue_count = 1, last_error = #error_info{}},
+    InitialEndpointInfo = #endpoint_info{total_queue_count = 1, targets = #{Target => InitialTargetInfo}},
+    ets:insert(request_stats, {request_data, #system_info{endpoints = #{Endpoint => InitialEndpointInfo}}}),
+    
+    % Now update the last error
+    analytics:update_last_error(Endpoint, Target, ErrorTime, ErrorText),
+    
+    % Check the result
+    [{request_data, UpdatedData}] = ets:lookup(request_stats, request_data),
+    UpdatedEndpointInfo = maps:get(Endpoint, UpdatedData#system_info.endpoints),
+    UpdatedTargetInfo = maps:get(Target, UpdatedEndpointInfo#endpoint_info.targets),
+    ?assertEqual(#error_info{time = ErrorTime, text = ErrorText}, UpdatedTargetInfo#target_info.last_error).

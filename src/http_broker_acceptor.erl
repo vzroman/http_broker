@@ -59,7 +59,7 @@ try_send( Request, #{
   targets := Targets
 }) ->
 
-  {_Target, Response} = call_one( Request, Targets ),
+  {_Target, Response} = call_one( Request, Targets, undefined ),
 
   Response;
 
@@ -105,7 +105,7 @@ try_send( Request, #{
   AllTargets = all_targets( Targets ),
   Send =
     fun( Target )->
-      case send_to_target(Target, Request) of
+      case send_to_target(Target, Request, undefined) of
         {ok, _Response} -> ok;
         {error, Error, _Response} ->
           ?LOGWARNING("unable send request to target ~p, error ~p",[ Target, Error ])
@@ -119,9 +119,7 @@ try_send( Request, #{
     body = <<>>
   }.
 
-
 call_one(Request, Targets, Endpoint)->
-
   {Target, RestTargets} = pick_target( Targets ),
 
   case send_to_target(Target, Request, Endpoint) of
@@ -133,7 +131,7 @@ call_one(Request, Targets, Endpoint)->
         length(RestTargets) =:= 0 ->
           {Target, Response};
         true ->
-          call_one(Request, RestTargets, Endpoint )
+          call_one(Request, RestTargets, Endpoint)
       end
   end.
 
@@ -225,18 +223,18 @@ send_to_target({URL, Params} = Target,
   store_request_time(Endpoint, Target, ExecutionTime),
   Result.
 
--spec store_request_time(Endpoint :: term(), Target :: term(), ExecutionTime :: integer()) -> ok.
-store_request_time(Endpoint, Target, ExecutionTime) ->
-    Key = {request_times, Endpoint, Target},
-    Times = case persistent_term:get(Key, undefined) of
-        undefined -> [];
-        StoredTimes -> StoredTimes
-    end,
-    NewTimes = [ExecutionTime | Times],
-    UpdatedTimes = lists:sublist(NewTimes, 10),
-    persistent_term:put(Key, UpdatedTimes),
-    ok.
 
+  -spec store_request_time(Endpoint :: term(), Target :: term(), ExecutionTime :: integer()) -> ok.
+  store_request_time(Endpoint, Target, ExecutionTime) ->
+      Key = {request_times, Endpoint, Target},
+      Times = case ets:lookup(request_times_table, Key) of
+          [] -> [];
+          [{_, StoredTimes}] -> StoredTimes
+      end,
+      NewTimes = [ExecutionTime | Times],
+      UpdatedTimes = lists:sublist(NewTimes, 10),
+      ets:insert(request_times_table, {Key, UpdatedTimes}),
+      ok.
 
 -spec store_request_error(Endpoint :: term(), Target :: term(), Error :: term()) -> ok.
 store_request_error(Endpoint, Target, Error) ->

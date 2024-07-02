@@ -22,12 +22,9 @@ handle_request(Req, State) ->
     {ok, Req, State}.
 
 handle_queue_stats(CowboyRequest, State) ->
-  {QueueCount, ItemCount, AttemptsCount} = broker_analytics:collect_data(),
-  Error = case maps:get(error, State, undefined) of
-    undefined -> "";
-    Err -> Err
-  end,
-  JsonData = broker_analytics:convert_to_json(QueueCount, ItemCount, AttemptsCount, Error),
+  SystemInfo = broker_analytics:collect_data(),
+  JsonData = broker_analytics:convert_to_json(SystemInfo),
+  broker_analytics:log_data(JsonData),
   Headers = #{<<"content-type">> => <<"application/json">>},
   CowboyResponse = cowboy_req:reply(200, Headers, JsonData, CowboyRequest),
   {ok, CowboyResponse, State}.

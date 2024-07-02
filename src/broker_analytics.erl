@@ -3,7 +3,8 @@
 -include("http_broker.hrl").
 -include("analytics.hrl").
 
--export([start/0, collect_data/0, convert_to_json/4]).
+-export([start/0, collect_data/0, convert_to_json/1]).
+-export([log_data/1]).
 
 start() ->
     schedule(),
@@ -14,12 +15,10 @@ schedule() ->
 
 collect_data() ->
     QueueDB = persistent_term:get(?DB_REF),
-    {QueueCount, ItemCount, AttemptsCount} = get_queue_stats(QueueDB),
+    QueueCount = count_queues(QueueDB),
     SystemInfo = get_system_info(QueueCount, QueueDB),
     analytics:update_endpoint(request_data, SystemInfo),
-    JsonData = convert_to_json(SystemInfo),
-    log_data(JsonData),
-    {QueueCount, ItemCount, AttemptsCount}.
+    SystemInfo.
 
 get_system_info(QueueCount, QueueDB) ->
     Endpoints = get_endpoints(QueueDB),
@@ -110,13 +109,7 @@ find_error_queue_counts(Endpoint, QueueDB) ->
         fun(Key) -> get_attempts_count(QueueDB, Key) > 0 end).
 
 
-get_queue_stats(QueueDB) ->
-    QueueCount = count_targets(QueueDB),
-    ItemCount = count_queue_items(QueueDB),
-    AttemptsCount = get_attempts_count(QueueDB),
-    {QueueCount, ItemCount, AttemptsCount}.
-
-count_targets(QueueDB) ->
+count_queues(QueueDB) ->
     GroupedList = fold_with_target_key(QueueDB,
         fun(Endpoint, Service, Acc) ->
             case lists:member({Endpoint, Service}, Acc) of
@@ -125,17 +118,8 @@ count_targets(QueueDB) ->
             end
         end,
         []),
-    maps:from_list([{Key, 1} || Key <- GroupedList]).
+    length(GroupedList).
 
-
-count_queue_items(QueueDB) ->
-    fold_with_target_key(QueueDB, fun(_, Acc) -> Acc + 1 end, 0).
-
-get_attempts_count(QueueDB) ->
-    case zaya_rocksdb:last(QueueDB) of
-        {Key, _Value} -> get_attempts_count(QueueDB, Key);
-        _ -> 0
-    end. 
 
 get_attempts_count(QueueDB, Key) ->
     case zaya_rocksdb:read(QueueDB, [Key]) of
@@ -205,13 +189,12 @@ convert_to_json(SystemInfo) ->
 
     jsx:encode(JsonData).
 
-
 -spec get_average_10request_duration(Endpoint :: term(), Target :: term()) -> float().
 get_average_10request_duration(Endpoint, Target) ->
     Key = {request_times, Endpoint, Target},
-    case persistent_term:get(Key, undefined) of
-        undefined -> 0.0;
-        Times ->
+    case ets:lookup(request_times_table, Key) of
+        [] -> 0.0;
+        [{_, Times}] ->
             Length = length(Times),
             case Length of
                 0 -> 0.0;
