@@ -224,17 +224,17 @@ send_to_target({URL, Params} = Target,
   Result.
 
 
-  -spec store_request_time(Endpoint :: term(), Target :: term(), ExecutionTime :: integer()) -> ok.
-  store_request_time(Endpoint, Target, ExecutionTime) ->
-      Key = {request_times, Endpoint, Target},
-      Times = case ets:lookup(request_times_table, Key) of
-          [] -> [];
-          [{_, StoredTimes}] -> StoredTimes
-      end,
-      NewTimes = [ExecutionTime | Times],
-      UpdatedTimes = lists:sublist(NewTimes, 10),
-      ets:insert(request_times_table, {Key, UpdatedTimes}),
-      ok.
+-spec store_request_time(Endpoint :: term(), Target :: term(), ExecutionTime :: integer()) -> ok.
+store_request_time(Endpoint, Target, ExecutionTime) ->
+    Key = {request_times, Endpoint, Target},
+    Times = case ets:lookup(request_times_table, Key) of
+        [] -> [];
+        [{_, StoredTimes}] -> StoredTimes
+    end,
+    NewTimes = [ExecutionTime | Times],
+    UpdatedTimes = lists:sublist(NewTimes, 10),
+    ets:insert(request_times_table, {Key, UpdatedTimes}),
+    ok.
 
 -spec store_request_error(Endpoint :: term(), Target :: term(), Error :: term()) -> ok.
 store_request_error(Endpoint, Target, Error) ->

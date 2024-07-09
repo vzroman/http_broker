@@ -5,6 +5,9 @@
 
 -export([start/0, collect_data/0, convert_to_json/1]).
 -export([log_data/1]).
+% TEST EXPORT
+-export([count_queues/1, get_attempts_count/2, get_average_10request_duration/2]).
+% END TEST EXPORT
 
 start() ->
     schedule(),
@@ -37,7 +40,7 @@ get_system_info(QueueCount, QueueDB) ->
 
 find_all_error_queue_count(QueueDB) ->
     fold_with_target_key(QueueDB,
-        fun(_Endpoint, ErrorCounts) ->
+        fun(_Endpoint, _Service, _Value, ErrorCounts) ->
             ErrorCounts + 1
         end,
         0,
@@ -65,16 +68,16 @@ fold_with_target_key(QueueDB, Fun, InitAcc, Condition) ->
 
 get_queue_count_for(Endpoint, QueueDB) ->
     fold_with_target_key(QueueDB, 
-        fun(FoundEndpoint, Acc) when FoundEndpoint =:= Endpoint -> 
+        fun(FoundEndpoint, _Service, _Value, Acc) when FoundEndpoint =:= Endpoint -> 
             Acc + 1;
-           (_, Acc) -> 
+           (_, _, _ , Acc) -> 
             Acc 
         end, 
         0).
 
 get_endpoints(QueueDB) -> % todo: check it
     Endpoints = fold_with_target_key(QueueDB, 
-                       fun(Endpoint, Acc) ->
+                       fun(Endpoint, _Service, _Value, Acc) ->
                           case lists:member(Endpoint, Acc) of
                               false -> [Endpoint | Acc];
                               _ -> Acc
@@ -94,15 +97,15 @@ get_targets_for(Endpoint, QueueDB) ->
             Acc
         end,
         #{},
-        fun(_Key, Value) -> Value end),
+        fun({target, E, _, _}) -> E =:= Endpoint end),
     maps:map(fun(_, List) -> lists:reverse(List) end, Map).
 
 
 find_error_queue_counts(Endpoint, QueueDB) ->
     fold_with_target_key(QueueDB,
-        fun(FoundEndpoint, ErrorCount) when FoundEndpoint =:= Endpoint ->
+        fun(FoundEndpoint, _Service, _Value, ErrorCount) when FoundEndpoint =:= Endpoint ->
             ErrorCount + 1;
-           (_, ErrorCount) ->
+           (_,_,_, ErrorCount) ->
             ErrorCount
         end,
         0,
@@ -111,7 +114,7 @@ find_error_queue_counts(Endpoint, QueueDB) ->
 
 count_queues(QueueDB) ->
     GroupedList = fold_with_target_key(QueueDB,
-        fun(Endpoint, Service, Acc) ->
+        fun(Endpoint, Service, _Value, Acc) ->
             case lists:member({Endpoint, Service}, Acc) of
                 false -> [{Endpoint, Service} | Acc];
                 true -> Acc
@@ -151,35 +154,9 @@ convert_to_json(SystemInfo) ->
         endpoints = Endpoints
     } = SystemInfo,
 
-    EndpointsJson = maps:map(fun(Endpoint, EndpointInfo) ->
-        #endpoint_info{
-            total_queue_count = EndpointTotalQueueCount,
-            error_queue_counts = EndpointErrorQueueCounts,
-            targets = Targets
-        } = EndpointInfo,
-
-        TargetsJson = maps:map(fun(Target, TargetInfo) ->
-            #{
-                queue_count => maps:get(queue_count, TargetInfo, 0),
-                state => maps:get(state, TargetInfo, <<"unknown">>),
-                attempts => maps:get(attempts, TargetInfo, 0),
-                average_10request_duration => get_average_10request_duration(Endpoint, Target),
-                last_error => case maps:get(last_error, TargetInfo, undefined) of
-                    undefined -> null;
-                    LastError -> #{
-                        time => format_datetime(maps:get(time, LastError, erlang:system_time(millisecond))),
-                        text => maps:get(text, LastError, <<"unknown error">>)
-                    }
-                end
-            }
-        end, Targets),
-
-        #{
-            total_queue_count => EndpointTotalQueueCount,
-            error_queue_counts => EndpointErrorQueueCounts,
-            targets => TargetsJson
-        }
-    end, Endpoints),
+    EndpointsJson = maps:map(fun(_Endpoint, EndpointInfo) ->
+        endpoint_info_to_map(EndpointInfo)
+        end, Endpoints),
 
     JsonData = #{
         total_queue_count => TotalQueueCount,
@@ -188,6 +165,43 @@ convert_to_json(SystemInfo) ->
     },
 
     jsx:encode(JsonData).
+
+endpoint_info_to_map(#endpoint_info{
+                        total_queue_count = TotalQueueCount,
+                        error_queue_counts = ErrorQueueCounts,
+                        targets = Targets
+                       }) ->
+
+    TargetsJson = maps:map(fun(_Target, TargetInfo) ->
+    target_info_to_json(TargetInfo) end, Targets),
+
+    #{
+        total_queue_count => TotalQueueCount,
+        error_queue_counts => ErrorQueueCounts,
+        targets => TargetsJson
+    }.
+
+target_info_to_json(
+    #target_info{
+        queue_count = QueueCount,
+        state = State,
+        attempts = Attempts,
+        average_10request_duration = AvgDuration,
+        last_error = LastError
+    }) ->
+    #{
+        queue_count => QueueCount,
+        state => atom_to_binary(State),
+        attempts => Attempts,
+        average_10request_duration => AvgDuration,
+        last_error => case LastError of
+            undefined -> null;
+            #error_info{time = Time, text = Text} -> #{
+                time => list_to_binary(Time),
+                text => list_to_binary(Text)
+            }
+        end
+    }.
 
 -spec get_average_10request_duration(Endpoint :: term(), Target :: term()) -> float().
 get_average_10request_duration(Endpoint, Target) ->
@@ -202,9 +216,4 @@ get_average_10request_duration(Endpoint, Target) ->
             end
     end.
     
-format_datetime(Timestamp) when is_integer(Timestamp) ->
-    {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:system_time_to_universal_time(Timestamp, millisecond),
-    Millisecond = Timestamp rem 1000,
-    list_to_binary(io_lib:format("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0B:~3..0B", 
-                                    [Year, Month, Day, Hour, Minute, Second, Millisecond])).
     
