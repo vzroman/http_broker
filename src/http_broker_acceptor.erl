@@ -266,26 +266,21 @@ all_targets(Targets) ->
 
 % Helper function to extract endpoint (should be in the main module)
 extract_endpoint(Input) ->
-    case Input of
-        {URL, _} when is_binary(URL) ->
-            Parts = binary:split(URL, <<"/">>, [global]),
-            case Parts of
-                [<<"http:">>, _, Host | _] ->
-                    Host;
-                _ ->
-                    ?LOGWARNING("Unable to extract endpoint from URL: ~p~n", [URL]),
-                    undefined
-            end;
-        URL when is_binary(URL) ->
-            Parts = binary:split(URL, <<"/">>, [global]),
-            case Parts of
-                [<<"http:">>, _, Host | _] ->
-                    Host;
-                _ ->
-                    ?LOGWARNING("Unable to extract endpoint from URL: ~p~n", [URL]),
-                    undefined
-            end;
+    extract_endpoint_from_url(Input).
+
+extract_endpoint_from_url({URL, _}) when is_binary(URL) ->
+    extract_endpoint_from_url(URL);
+extract_endpoint_from_url(URL) when is_binary(URL) ->
+    Parts = binary:split(URL, <<"/">>, [global]),
+    case Parts of
+        [<<"http:">>, _, Host | _] ->
+            Host;
+        [<<"https:">>, _, Host | _] ->
+          Host;
         _ ->
-            ?LOGWARNING("Unexpected input: ~p~n", [Input]),
+            ?LOGWARNING("Unable to extract endpoint from URL: ~p~n", [URL]),
             undefined
-    end.
+    end;
+extract_endpoint_from_url(Input) ->
+    ?LOGWARNING("Unexpected input: ~p~n", [Input]),
+    undefined.

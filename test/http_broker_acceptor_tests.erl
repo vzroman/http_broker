@@ -73,7 +73,7 @@ create_request() ->
     #request{method = get, headers = #{}, body = <<>>}.
 
 create_targets() ->
-    [{1, [{<<"http://example.com/api1">>, #{}}, {<<"http://example.com/api2">>, #{}}]}].
+    [{1, [{<<"https://example.com/api1">>, #{}}, {<<"http://example.com/api2">>, #{}}]}].
 
 create_config(call_all, Targets) ->
 	#{strategy => call_all, targets => Targets, endpoint => <<"test_endpoint">>};

@@ -9,7 +9,13 @@
 init() ->
     case ets:info(request_stats) of
         undefined ->
-            ets:new(request_stats, [named_table, public, set]);
+            ets:new(request_stats, [named_table, public, set]),
+            InitialData = #system_info{
+                total_queue_count = 0,
+                error_queues_counts = 0,
+                endpoints = #{}
+            },
+            ets:insert(request_stats, {request_data, InitialData});
         _ ->
             ok
     end.

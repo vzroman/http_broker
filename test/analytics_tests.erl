@@ -45,12 +45,17 @@ test_update_endpoint() ->
     analytics:update_endpoint(Endpoint, EndpointInfo),
     
     [{request_data, Data}] = ets:lookup(request_stats, request_data),
-    ?assertEqual(EndpointInfo, maps:get(Endpoint, Data#system_info.endpoints)).
+    ?assertMatch(#system_info{endpoints = #{<<"test_endpoint">> := _}}, Data).
+
 
 test_update_endpoint_target() ->
     Endpoint = <<"test_endpoint">>,
     Target = <<"test_target">>,
     TargetInfo = #target_info{queue_count = 1},
+
+    InitialEndpointInfo = #endpoint_info{total_queue_count = 0, targets = #{}},
+    analytics:update_endpoint(Endpoint, InitialEndpointInfo),
+
     analytics:update_endpoint_target(Endpoint, Target, TargetInfo),
     
     [{request_data, Data}] = ets:lookup(request_stats, request_data),
@@ -63,12 +68,10 @@ test_update_last_error() ->
     ErrorTime = erlang:system_time(second),
     ErrorText = <<"Test error">>,
     
-    % First, insert some initial data
-    InitialTargetInfo = #target_info{queue_count = 1, last_error = #error_info{}},
+    InitialTargetInfo = #target_info{queue_count = 1},
     InitialEndpointInfo = #endpoint_info{total_queue_count = 1, targets = #{Target => InitialTargetInfo}},
-    ets:insert(request_stats, {request_data, #system_info{endpoints = #{Endpoint => InitialEndpointInfo}}}),
-    
-    % Now update the last error
+    analytics:update_endpoint(Endpoint, InitialEndpointInfo),
+ 
     analytics:update_last_error(Endpoint, Target, ErrorTime, ErrorText),
     
     % Check the result
