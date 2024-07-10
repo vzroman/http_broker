@@ -1,8 +1,7 @@
 -module(broker_analytics_tests).
 -include_lib("eunit/include/eunit.hrl").
-%-include_lib("jsx/include/jsx.hrl").
--include("http_broker.hrl").
--include("analytics.hrl").
+-include("../include/http_broker.hrl").
+-include("../include/analytics.hrl").
 
 broker_analytics_test_() ->
     {setup,

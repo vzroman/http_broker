@@ -25,6 +25,10 @@
 %%=================================================================
 -export([init/2, terminate/3]).
 
+%-ifdef(TEST).
+-export([try_send/2, call_one/3, send_to_target/3, extract_endpoint/1, pick_target/1]).
+%-endif.
+
 
 init(CowboyRequest, Config) ->
   {Body, CowboyRequest1} = read_body(CowboyRequest),
@@ -58,7 +62,6 @@ try_send( Request, #{
   strategy := call_one,
   targets := Targets
 }) ->
-
   {_Target, Response} = call_one( Request, Targets, undefined ),
 
   Response;
@@ -105,7 +108,8 @@ try_send( Request, #{
   AllTargets = all_targets( Targets ),
   Send =
     fun( Target )->
-      case send_to_target(Target, Request, undefined) of
+      Endpoint = extract_endpoint(Target),
+      case send_to_target(Target, Request, Endpoint) of
         {ok, _Response} -> ok;
         {error, Error, _Response} ->
           ?LOGWARNING("unable send request to target ~p, error ~p",[ Target, Error ])
@@ -122,7 +126,14 @@ try_send( Request, #{
 call_one(Request, Targets, Endpoint)->
   {Target, RestTargets} = pick_target( Targets ),
 
-  case send_to_target(Target, Request, Endpoint) of
+  % if not Endpoint 
+  Endpoint1 = case Endpoint of
+    undefined ->
+      extract_endpoint(Target);
+    _ -> Endpoint
+  end,
+
+  case send_to_target(Target, Request, Endpoint1) of
     {ok, Response} ->
       {Target, Response};
     {error, Error, Response} ->
@@ -251,3 +262,30 @@ parse_method(Method) ->
 
 all_targets(Targets) ->
   lists:append( [TargetsList || {_Key, TargetsList} <- Targets]).
+
+
+% Helper function to extract endpoint (should be in the main module)
+extract_endpoint(Input) ->
+    case Input of
+        {URL, _} when is_binary(URL) ->
+            Parts = binary:split(URL, <<"/">>, [global]),
+            case Parts of
+                [<<"http:">>, _, Host | _] ->
+                    Host;
+                _ ->
+                    ?LOGWARNING("Unable to extract endpoint from URL: ~p~n", [URL]),
+                    undefined
+            end;
+        URL when is_binary(URL) ->
+            Parts = binary:split(URL, <<"/">>, [global]),
+            case Parts of
+                [<<"http:">>, _, Host | _] ->
+                    Host;
+                _ ->
+                    ?LOGWARNING("Unable to extract endpoint from URL: ~p~n", [URL]),
+                    undefined
+            end;
+        _ ->
+            ?LOGWARNING("Unexpected input: ~p~n", [Input]),
+            undefined
+    end.
