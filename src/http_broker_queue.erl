@@ -151,7 +151,7 @@ check_targets( _DB, _Queue, _Other, _Targets, Count )->
   Count.
 
 purge_queue(DB, ?QUEUE(Endpoint, Ref)=Queue, {?TARGET(Endpoint, _Service, Ref) = Target, _Attempts})->
-  zaya:delete(DB, [Target]),
+  zaya_rocksdb:delete(DB, [Target]),
   purge_queue(DB, Queue, zaya_rocksdb:next( DB, Target ));
 purge_queue(DB, Queue, _Other)->
-  zaya:delete(DB, [Queue]).
+  zaya_rocksdb:delete(DB, [Queue]).
