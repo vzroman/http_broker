@@ -80,7 +80,7 @@ try_send( Request, #{
   #response{ code =  ResponseCode} = Response,
 
   if
-    (ResponseCode >= 200 orelse ResponseCode =< 299)  ->
+    (ResponseCode >= 200 andalso ResponseCode =< 299)  ->
       % If the process crashes here then the client will receive
       %   500 Server Internal Error
       % and the request should be handled as not successful
@@ -117,7 +117,7 @@ try_send( Request, #{
           ?LOGWARNING("unable send request to target ~p, error ~p",[ Target, Error ])
       end
     end,
-  [ Send( T ) || T <- AllTargets],
+  spawn(fun()-> [ Send( T ) || T <- AllTargets] end),
 
   #response{
     code = 200,
@@ -125,6 +125,10 @@ try_send( Request, #{
     body = <<>>
   }.
 
+
+call_one(_Request, [])->
+  ?LOGWARNING("no targets configured for request", []),
+  {undefined, #response{code = 503, headers = [], body = <<>>}};
 
 call_one(Request, Targets)->
 
